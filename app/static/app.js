@@ -14,139 +14,193 @@ function formatDate(value) {
   return new Date(value).toLocaleString();
 }
 
-function renderEvent(event) {
-  return `
-    <article class="event-item">
-      <a href="${event.snapshot_url}" target="_blank" rel="noreferrer">
-        <img src="${event.snapshot_url}" alt="Detection snapshot ${event.id}">
-      </a>
-      <div>
-        <strong>${event.label} candidate</strong>
-        <span>${formatDate(event.created_at)}</span>
-        <span>${Math.round(event.confidence * 100)}% confidence</span>
-        <small>Box: ${Math.round(event.box.x1)}, ${Math.round(event.box.y1)} to ${Math.round(event.box.x2)}, ${Math.round(event.box.y2)}</small>
-      </div>
-    </article>
-  `;
+function boxLabel(event) {
+  return `Box: ${Math.round(event.box.x1)}, ${Math.round(event.box.y1)} to ${Math.round(event.box.x2)}, ${Math.round(event.box.y2)}`;
 }
 
-async function refreshStatus() {
-  const status = await requestJson("/api/status");
-  document.querySelector("#status-running").textContent = status.detector_enabled && status.worker_running ? "Running" : "Paused";
-  document.querySelector("#status-camera").textContent = status.camera_connected ? "Connected" : "Disconnected";
-  document.querySelector("#status-frame").textContent = formatDate(status.last_frame_at);
-  document.querySelector("#status-event").textContent = formatDate(status.last_event_at);
-  document.querySelector("#status-error").textContent = status.last_error || "";
-  const settings = document.querySelector("#settings-summary");
-  settings.innerHTML = `
-    <dt>Camera</dt><dd>${status.camera_device}</dd>
-    <dt>Model</dt><dd>${status.model_name}</dd>
-    <dt>Threshold</dt><dd>${status.settings.confidence_threshold}</dd>
-    <dt>Cooldown</dt><dd>${status.settings.cooldown_seconds}s</dd>
-    <dt>Retention</dt><dd>${status.settings.retention_days} days</dd>
-  `;
-  return status;
-}
-
-async function refreshEvents(selector, limit = 20) {
-  const events = await requestJson(`/api/events?limit=${limit}`);
-  const list = document.querySelector(selector);
-  list.innerHTML = events.length ? events.map(renderEvent).join("") : `<p class="empty">No detections recorded yet.</p>`;
+function requireVue() {
+  if (!window.Vue) {
+    throw new Error("Vue failed to load");
+  }
+  return window.Vue;
 }
 
 function dashboard() {
-  document.querySelector("#start-detector").addEventListener("click", async () => {
-    await requestJson("/api/detector/start", { method: "POST" });
-    await refreshStatus();
-  });
-  document.querySelector("#stop-detector").addEventListener("click", async () => {
-    await requestJson("/api/detector/stop", { method: "POST" });
-    await refreshStatus();
-  });
-  const tick = async () => {
-    try {
-      await refreshStatus();
-      await refreshEvents("#latest-events", 5);
-    } catch (error) {
-      document.querySelector("#status-error").textContent = error.message;
-    }
-  };
-  tick();
-  setInterval(tick, 5000);
+  const { createApp } = requireVue();
+  createApp({
+    data() {
+      return {
+        status: null,
+        events: [],
+        statusError: "",
+        timer: null,
+      };
+    },
+    computed: {
+      runningLabel() {
+        if (!this.status) return "Loading";
+        return this.status.detector_enabled && this.status.worker_running ? "Running" : "Paused";
+      },
+      cameraLabel() {
+        if (!this.status) return "Loading";
+        return this.status.camera_connected ? "Connected" : "Disconnected";
+      },
+    },
+    async mounted() {
+      await this.refresh();
+      this.timer = setInterval(this.refresh, 3000);
+    },
+    unmounted() {
+      if (this.timer) clearInterval(this.timer);
+    },
+    methods: {
+      formatDate,
+      boxLabel,
+      async refresh() {
+        try {
+          const [status, events] = await Promise.all([
+            requestJson("/api/status"),
+            requestJson("/api/events?limit=5"),
+          ]);
+          this.status = status;
+          this.events = events;
+          this.statusError = status.last_error || "";
+        } catch (error) {
+          this.statusError = error.message;
+        }
+      },
+      async startDetector() {
+        try {
+          this.status = await requestJson("/api/detector/start", { method: "POST" });
+          await this.refresh();
+        } catch (error) {
+          this.statusError = error.message;
+        }
+      },
+      async stopDetector() {
+        try {
+          this.status = await requestJson("/api/detector/stop", { method: "POST" });
+          await this.refresh();
+        } catch (error) {
+          this.statusError = error.message;
+        }
+      },
+    },
+  }).mount("#dashboard-app");
 }
 
 function eventsPage() {
-  refreshEvents("#events-page-list", 100);
-  setInterval(() => refreshEvents("#events-page-list", 100), 10000);
+  const { createApp } = requireVue();
+  createApp({
+    data() {
+      return {
+        events: [],
+        error: "",
+        timer: null,
+      };
+    },
+    async mounted() {
+      await this.refresh();
+      this.timer = setInterval(this.refresh, 5000);
+    },
+    unmounted() {
+      if (this.timer) clearInterval(this.timer);
+    },
+    methods: {
+      formatDate,
+      boxLabel,
+      async refresh() {
+        try {
+          this.events = await requestJson("/api/events?limit=100");
+          this.error = "";
+        } catch (error) {
+          this.error = error.message;
+        }
+      },
+    },
+  }).mount("#events-app");
 }
 
-async function settingsPage() {
-  const form = document.querySelector("#settings-form");
-  const message = document.querySelector("#settings-message");
-  const previewImage = document.querySelector("#camera-preview-image");
-  const previewEmpty = document.querySelector("#camera-preview-empty");
-  const previewMessage = document.querySelector("#camera-preview-message");
-  const refreshPreview = async () => {
-    previewMessage.textContent = "";
-    previewEmpty.textContent = "Loading preview...";
-    previewEmpty.hidden = false;
-    previewImage.hidden = true;
-    try {
-      const response = await fetch(`/api/camera/preview?t=${Date.now()}`, { cache: "no-store" });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(body.detail || response.statusText);
-      }
-      const blob = await response.blob();
-      const previousUrl = previewImage.dataset.objectUrl;
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
-      const nextUrl = URL.createObjectURL(blob);
-      previewImage.dataset.objectUrl = nextUrl;
-      previewImage.src = nextUrl;
-      previewImage.hidden = false;
-      previewEmpty.hidden = true;
-    } catch (error) {
-      previewImage.hidden = true;
-      previewEmpty.textContent = "Preview unavailable.";
-      previewMessage.textContent = error.message;
-    }
-  };
-  const [status, cameras] = await Promise.all([requestJson("/api/status"), requestJson("/api/cameras")]);
-  form.camera_device.innerHTML = cameras.map((camera) => {
-    const suffix = camera.available ? "" : " (not available)";
-    return `<option value="${camera.path}">${camera.path}${suffix}</option>`;
-  }).join("");
-  form.enabled.checked = status.settings.enabled;
-  form.camera_device.value = status.settings.camera_device;
-  form.confidence_threshold.value = status.settings.confidence_threshold;
-  form.cooldown_seconds.value = status.settings.cooldown_seconds;
-  form.retention_days.value = status.settings.retention_days;
-  document.querySelector("#refresh-preview").addEventListener("click", refreshPreview);
-  form.camera_device.addEventListener("change", () => {
-    previewEmpty.textContent = "Save settings to preview the selected camera.";
-    previewEmpty.hidden = false;
-    previewImage.hidden = true;
-    previewMessage.textContent = "";
-  });
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    message.textContent = "Saving...";
-    const payload = {
-      enabled: form.enabled.checked,
-      camera_device: form.camera_device.value,
-      confidence_threshold: Number(form.confidence_threshold.value),
-      cooldown_seconds: Number(form.cooldown_seconds.value),
-      retention_days: Number(form.retention_days.value),
-    };
-    try {
-      await requestJson("/api/settings", { method: "PATCH", body: JSON.stringify(payload) });
-      message.textContent = "Settings saved.";
-      await refreshPreview();
-    } catch (error) {
-      message.textContent = error.message;
-    }
-  });
-  refreshPreview();
+function settingsPage() {
+  const { createApp } = requireVue();
+  createApp({
+    data() {
+      return {
+        cameras: [],
+        form: {
+          enabled: false,
+          camera_device: "/dev/video0",
+          confidence_threshold: 0.35,
+          cooldown_seconds: 60,
+          retention_days: 7,
+        },
+        message: "",
+        previewUrl: "",
+        previewEmpty: "No preview loaded.",
+        previewError: "",
+      };
+    },
+    async mounted() {
+      await this.load();
+      await this.refreshPreview();
+    },
+    unmounted() {
+      this.revokePreviewUrl();
+    },
+    methods: {
+      cameraLabel(camera) {
+        return `${camera.path}${camera.available ? "" : " (not available)"}`;
+      },
+      async load() {
+        const [status, cameras] = await Promise.all([requestJson("/api/status"), requestJson("/api/cameras")]);
+        this.cameras = cameras;
+        this.form = { ...status.settings };
+      },
+      async saveSettings() {
+        this.message = "Saving...";
+        try {
+          this.form = await requestJson("/api/settings", {
+            method: "PATCH",
+            body: JSON.stringify(this.form),
+          });
+          this.message = "Settings saved.";
+          await this.load();
+          await this.refreshPreview();
+        } catch (error) {
+          this.message = error.message;
+        }
+      },
+      markPreviewStale() {
+        this.revokePreviewUrl();
+        this.previewEmpty = "Save settings to preview the selected camera.";
+        this.previewError = "";
+      },
+      async refreshPreview() {
+        this.previewError = "";
+        this.previewEmpty = "Loading preview...";
+        this.revokePreviewUrl();
+        try {
+          const response = await fetch(`/api/camera/preview?t=${Date.now()}`, { cache: "no-store" });
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(body.detail || response.statusText);
+          }
+          const blob = await response.blob();
+          this.previewUrl = URL.createObjectURL(blob);
+          this.previewEmpty = "";
+        } catch (error) {
+          this.previewError = error.message;
+          this.previewEmpty = "Preview unavailable.";
+        }
+      },
+      revokePreviewUrl() {
+        if (this.previewUrl) {
+          URL.revokeObjectURL(this.previewUrl);
+          this.previewUrl = "";
+        }
+      },
+    },
+  }).mount("#settings-app");
 }
 
 window.Pigeonater = { dashboard, eventsPage, settingsPage };

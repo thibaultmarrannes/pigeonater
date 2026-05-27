@@ -1,14 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-head">
-  <div>
-    <p class="eyebrow">Evidence</p>
-    <h1>Detection events</h1>
+<div id="events-app" v-cloak>
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Evidence</p>
+      <h1>Detection events</h1>
+    </div>
+  </section>
+  <div class="event-list wide">
+    <article v-for="event in events" :key="event.id" class="event-item">
+      <a :href="event.snapshot_url" target="_blank" rel="noreferrer">
+        <img :src="event.snapshot_url" :alt="`Detection snapshot ${event.id}`">
+      </a>
+      <div>
+        <strong v-text="`${event.label} candidate`"></strong>
+        <span v-text="formatDate(event.created_at)"></span>
+        <span v-text="`${Math.round(event.confidence * 100)}% confidence`"></span>
+        <small v-text="boxLabel(event)"></small>
+      </div>
+    </article>
+    <p v-if="!events.length" class="empty">No detections recorded yet.</p>
   </div>
-</section>
-<div id="events-page-list" class="event-list wide"></div>
+  <p class="error" v-text="error"></p>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>window.Pigeonater.eventsPage();</script>
 {% endblock %}
-

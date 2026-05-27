@@ -1,48 +1,68 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-head">
-  <div>
-    <p class="eyebrow">LAN appliance</p>
-    <h1>Pigeon candidate monitor</h1>
-  </div>
-  <div class="actions">
-    <button id="start-detector">Start</button>
-    <button id="stop-detector" class="secondary">Pause</button>
-  </div>
-</section>
+<div id="dashboard-app" v-cloak>
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">LAN appliance</p>
+      <h1>Pigeon candidate monitor</h1>
+    </div>
+    <div class="actions">
+      <button type="button" @click="startDetector">Start</button>
+      <button type="button" class="secondary" @click="stopDetector">Pause</button>
+    </div>
+  </section>
 
-<section class="status-grid">
-  <article>
-    <span>Status</span>
-    <strong id="status-running">Loading</strong>
-  </article>
-  <article>
-    <span>Camera</span>
-    <strong id="status-camera">Loading</strong>
-  </article>
-  <article>
-    <span>Last frame</span>
-    <strong id="status-frame">Never</strong>
-  </article>
-  <article>
-    <span>Last event</span>
-    <strong id="status-event">Never</strong>
-  </article>
-</section>
+  <section class="status-grid">
+    <article>
+      <span>Status</span>
+      <strong v-text="runningLabel"></strong>
+    </article>
+    <article>
+      <span>Camera</span>
+      <strong v-text="cameraLabel"></strong>
+    </article>
+    <article>
+      <span>Last frame</span>
+      <strong v-text="formatDate(status?.last_frame_at)"></strong>
+    </article>
+    <article>
+      <span>Last event</span>
+      <strong v-text="formatDate(status?.last_event_at)"></strong>
+    </article>
+  </section>
 
-<section class="split">
-  <div>
-    <h2>Latest detections</h2>
-    <div id="latest-events" class="event-list"></div>
-  </div>
-  <aside class="panel">
-    <h2>Configuration</h2>
-    <dl id="settings-summary"></dl>
-    <p id="status-error" class="error"></p>
-  </aside>
-</section>
+  <section class="split">
+    <div>
+      <h2>Latest detections</h2>
+      <div class="event-list">
+        <article v-for="event in events" :key="event.id" class="event-item">
+          <a :href="event.snapshot_url" target="_blank" rel="noreferrer">
+            <img :src="event.snapshot_url" :alt="`Detection snapshot ${event.id}`">
+          </a>
+          <div>
+            <strong v-text="`${event.label} candidate`"></strong>
+            <span v-text="formatDate(event.created_at)"></span>
+            <span v-text="`${Math.round(event.confidence * 100)}% confidence`"></span>
+            <small v-text="boxLabel(event)"></small>
+          </div>
+        </article>
+        <p v-if="!events.length" class="empty">No detections recorded yet.</p>
+      </div>
+    </div>
+    <aside class="panel">
+      <h2>Configuration</h2>
+      <dl v-if="status">
+        <dt>Camera</dt><dd v-text="status.camera_device"></dd>
+        <dt>Model</dt><dd v-text="status.model_name"></dd>
+        <dt>Threshold</dt><dd v-text="status.settings.confidence_threshold"></dd>
+        <dt>Cooldown</dt><dd v-text="`${status.settings.cooldown_seconds}s`"></dd>
+        <dt>Retention</dt><dd v-text="`${status.settings.retention_days} days`"></dd>
+      </dl>
+      <p class="error" v-text="statusError"></p>
+    </aside>
+  </section>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>window.Pigeonater.dashboard();</script>
 {% endblock %}
-

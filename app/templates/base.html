@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pigeonater</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v={{ version_info.version }}">
   </head>
   <body>
     <header class="topbar">
@@ -21,7 +21,8 @@
     <footer class="app-footer">
       <span>Version {{ version_info.version }}</span>
     </footer>
-    <script src="/static/app.js"></script>
+    <script src="/static/vendor/vue.global.prod.js?v={{ version_info.version }}"></script>
+    <script src="/static/app.js?v={{ version_info.version }}"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>
