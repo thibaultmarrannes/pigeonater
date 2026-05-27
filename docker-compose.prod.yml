@@ -1,6 +1,6 @@
 services:
   pidgeonater:
-    image: "${PIDGEONATER_IMAGE:-ghcr.io/your-github-user/pidgeonater:main}"
+    image: "${PIDGEONATER_IMAGE:-ghcr.io/thibaultmarrannes/pigeonater:latest}"
     container_name: pidgeonater
     restart: unless-stopped
     ports:

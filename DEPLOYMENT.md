@@ -4,13 +4,13 @@ This project is designed to publish a Docker image from GitHub Actions and let t
 
 ## Image Publishing
 
-The workflow in `.github/workflows/container.yml` does this on pushes to `main` or `master`:
+The workflow in `.github/workflows/container.yml` does this on pushes to `DEV`, `main`, or `master`:
 
 1. Install Python dependencies.
 2. Run `pytest`.
 3. Build the Docker image.
 4. Push tags to GitHub Container Registry:
-   - `ghcr.io/<owner>/<repo>:main` or `:master`
+   - `ghcr.io/<owner>/<repo>:DEV`, `:main`, or `:master`
    - `ghcr.io/<owner>/<repo>:sha-<commit>`
    - `ghcr.io/<owner>/<repo>:latest` on the default branch
    - `ghcr.io/<owner>/<repo>:vX.Y.Z` for git tags like `v1.0.0`
@@ -43,7 +43,7 @@ Public packages do not need a login.
 Create a `.env` file next to `docker-compose.prod.yml`:
 
 ```bash
-PIDGEONATER_IMAGE=ghcr.io/<owner>/<repo>:main
+PIDGEONATER_IMAGE=ghcr.io/thibaultmarrannes/pigeonater:latest
 MODEL_NAME=yolo11n.pt
 ACTION_WEBHOOK_URL=
 ```
@@ -61,7 +61,7 @@ Open `http://<nuc-ip>:8080`, go to Settings, and select the visible `/dev/video*
 Point Lighthouse at the image tag you want to track, usually:
 
 ```text
-ghcr.io/<owner>/<repo>:main
+ghcr.io/<owner>/<repo>:latest
 ```
 
 When GitHub Actions publishes a new image for that tag, Lighthouse can pull it and restart the container. The container exposes a healthcheck that calls:
@@ -84,4 +84,3 @@ To roll back, set `PIDGEONATER_IMAGE` to a known-good SHA tag and restart:
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
-
