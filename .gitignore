@@ -5,5 +5,5 @@ data/
 *.db
 *.sqlite
 *.pyc
+*.pt
 .DS_Store
-
