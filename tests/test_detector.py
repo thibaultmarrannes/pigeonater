@@ -1,3 +1,5 @@
+import asyncio
+
 import numpy as np
 import pytest
 
@@ -13,6 +15,35 @@ class FakeModel:
 
     def detect(self, frame, confidence_threshold):
         return [item for item in self.detections if item.confidence >= confidence_threshold]
+
+
+class ClosedCapture:
+    def isOpened(self):
+        return False
+
+    def release(self):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_start_records_error_when_camera_open_fails(tmp_path, monkeypatch):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    storage.update_settings(storage.get_settings().model_copy(update={"enabled": True, "camera_device": "/dev/video9"}))
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+        camera_open_timeout_seconds=0.1,
+    )
+    worker = DetectorWorker(config, storage, model=FakeModel([]))
+    monkeypatch.setattr("app.detector.cv2.VideoCapture", lambda _: ClosedCapture())
+
+    await worker.start()
+    await asyncio.sleep(0.1)
+
+    assert worker.worker_running is False
+    assert worker.camera_connected is False
+    assert worker.last_error == "Could not open camera device /dev/video9"
 
 
 @pytest.mark.asyncio

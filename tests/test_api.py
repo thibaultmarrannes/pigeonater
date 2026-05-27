@@ -1,6 +1,8 @@
+import time
+
 from fastapi.testclient import TestClient
 
-from app.main import app, detector, storage
+from app.main import app, config, detector, storage
 from app.schemas import DetectorSettings
 
 
@@ -39,3 +41,23 @@ def test_settings_endpoint_validates_payload():
 
     assert response.status_code == 422
     assert detector.worker_running is False
+
+
+def test_cameras_endpoint_times_out_quickly(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
+    monkeypatch.setattr(config, "camera_discovery_timeout_seconds", 0.05)
+
+    def slow_camera_discovery(*args, **kwargs):
+        time.sleep(0.2)
+        return []
+
+    monkeypatch.setattr("app.main.list_camera_devices", slow_camera_discovery)
+
+    start = time.monotonic()
+    with TestClient(app) as client:
+        response = client.get("/api/cameras")
+    elapsed = time.monotonic() - start
+
+    assert response.status_code == 200
+    assert elapsed < 0.5
+    assert response.json() == [{"path": "/dev/video0", "selected": True, "available": False}]

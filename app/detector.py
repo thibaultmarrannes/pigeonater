@@ -89,16 +89,24 @@ class DetectorWorker:
     async def stop_worker(self) -> None:
         self._stop_event.set()
         if self._task and not self._task.done():
-            await asyncio.wait([self._task], timeout=5)
+            try:
+                await asyncio.wait_for(asyncio.shield(self._task), timeout=self.config.detector_stop_timeout_seconds)
+            except TimeoutError:
+                self.last_error = "Detector did not stop before timeout"
+                self._task.cancel()
 
     async def run(self) -> None:
         self.worker_running = True
         capture: cv2.VideoCapture | None = None
         try:
-            self._ensure_model()
+            await self._ensure_model()
             settings = self.storage.get_settings()
-            capture = cv2.VideoCapture(settings.camera_device)
-            if not capture.isOpened():
+            capture = await self._call_blocking(
+                "Open camera",
+                lambda: self._open_capture(settings.camera_device),
+                self.config.camera_open_timeout_seconds,
+            )
+            if capture is None:
                 self.camera_connected = False
                 self.last_error = f"Could not open camera device {settings.camera_device}"
                 return
@@ -111,7 +119,11 @@ class DetectorWorker:
                     await asyncio.sleep(1.0)
                     continue
 
-                ok, frame = capture.read()
+                ok, frame = await self._call_blocking(
+                    "Read camera frame",
+                    capture.read,
+                    self.config.camera_read_timeout_seconds,
+                )
                 if not ok or frame is None:
                     self.camera_connected = False
                     self.last_error = "Camera frame read failed"
@@ -129,7 +141,7 @@ class DetectorWorker:
             self.worker_running = False
             self.camera_connected = False
             if capture is not None:
-                capture.release()
+                await asyncio.to_thread(capture.release)
 
     async def process_frame(
         self,
@@ -137,9 +149,13 @@ class DetectorWorker:
         confidence_threshold: float,
         cooldown_seconds: int,
     ) -> bool:
-        self._ensure_model()
+        await self._ensure_model()
         assert self.model is not None
-        candidates = self.model.detect(frame, confidence_threshold)
+        candidates = await self._call_blocking(
+            "Run model detection",
+            lambda: self.model.detect(frame, confidence_threshold),
+            self.config.model_detect_timeout_seconds,
+        )
         if not candidates:
             return False
         best = max(candidates, key=lambda item: item.confidence)
@@ -147,7 +163,7 @@ class DetectorWorker:
         if self._last_event_at and (now - self._last_event_at).total_seconds() < cooldown_seconds:
             return False
 
-        snapshot_path = self.write_snapshot(frame, best.box)
+        snapshot_path = await asyncio.to_thread(self.write_snapshot, frame, best.box)
         event = self.storage.create_event(
             label=best.label,
             confidence=best.confidence,
@@ -181,6 +197,23 @@ class DetectorWorker:
             raise RuntimeError(f"Could not write snapshot to {path}")
         return path
 
-    def _ensure_model(self) -> None:
+    def _open_capture(self, camera_device: str) -> cv2.VideoCapture | None:
+        capture = cv2.VideoCapture(camera_device)
+        if not capture.isOpened():
+            capture.release()
+            return None
+        return capture
+
+    async def _ensure_model(self) -> None:
         if self.model is None:
-            self.model = YoloBirdModel(self.config.model_name)
+            self.model = await self._call_blocking(
+                "Load model",
+                lambda: YoloBirdModel(self.config.model_name),
+                self.config.model_detect_timeout_seconds,
+            )
+
+    async def _call_blocking(self, label: str, func, timeout_seconds: float):
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(func), timeout=timeout_seconds)
+        except TimeoutError as exc:
+            raise RuntimeError(f"{label} timed out after {timeout_seconds:g}s") from exc

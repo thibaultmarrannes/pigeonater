@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -70,7 +71,22 @@ async def api_events(limit: int = 100):
 
 @app.get("/api/cameras", response_model=list[CameraDevice])
 async def api_cameras():
-    return list_camera_devices(storage.get_settings().camera_device)
+    settings = storage.get_settings()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                list_camera_devices,
+                settings.camera_device,
+                probe_timeout_seconds=min(config.camera_discovery_timeout_seconds, 0.5),
+            ),
+            timeout=config.camera_discovery_timeout_seconds,
+        )
+    except TimeoutError:
+        detector.last_error = "Camera discovery timed out"
+        return [CameraDevice(path=settings.camera_device, selected=True, available=False)]
+    except Exception as exc:
+        detector.last_error = f"Camera discovery failed: {exc}"
+        return [CameraDevice(path=settings.camera_device, selected=True, available=False)]
 
 
 @app.get("/api/events/{event_id}")
