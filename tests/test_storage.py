@@ -12,6 +12,7 @@ def test_settings_round_trip(tmp_path):
             enabled=False,
             camera_device="/dev/video2",
             output_device="1",
+            sound_on_detection=True,
             confidence_threshold=0.5,
             cooldown_seconds=12,
             retention_days=7,

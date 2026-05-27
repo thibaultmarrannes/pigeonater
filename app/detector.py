@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from app.config import AppConfig
+from app.audio import play_test_beep
 from app.schemas import DetectionBox
 from app.storage import Storage
 from app.webhook import send_detection_webhook
@@ -173,6 +174,10 @@ class DetectorWorker:
         )
         self._last_event_at = now
 
+        settings = self.storage.get_settings()
+        if settings.sound_on_detection:
+            await self.play_detection_sound(settings.output_device)
+
         if self.config.action_webhook_url:
             sent, error = await send_detection_webhook(self.config.action_webhook_url, event)
             with self.storage.connect() as conn:
@@ -181,6 +186,19 @@ class DetectorWorker:
                     (int(sent), error, event.id),
                 )
         return True
+
+    async def play_detection_sound(self, output_device: str) -> None:
+        try:
+            result = await self._call_blocking(
+                "Play detection sound",
+                lambda: play_test_beep(output_device),
+                self.config.audio_playback_timeout_seconds,
+            )
+        except Exception as exc:
+            self.last_error = str(exc)
+            return
+        if not result.ok:
+            self.last_error = result.error
 
     def write_snapshot(self, frame: np.ndarray, box: DetectionBox) -> Path:
         annotated = frame.copy()

@@ -132,6 +132,7 @@ function settingsPage() {
           enabled: false,
           camera_device: "/dev/video0",
           output_device: "default",
+          sound_on_detection: false,
           confidence_threshold: 0.35,
           cooldown_seconds: 60,
           retention_days: 7,

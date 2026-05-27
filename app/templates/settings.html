@@ -26,6 +26,10 @@
       </select>
     </label>
     <label>
+      <span>Play sound on detection</span>
+      <input type="checkbox" v-model="form.sound_on_detection">
+    </label>
+    <label>
       <span>Confidence threshold</span>
       <input type="number" v-model.number="form.confidence_threshold" min="0.05" max="0.95" step="0.05">
     </label>

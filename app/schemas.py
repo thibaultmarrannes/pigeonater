@@ -28,6 +28,7 @@ class DetectorSettings(BaseModel):
     enabled: bool = True
     camera_device: str = Field(default="/dev/video0", min_length=1, max_length=255)
     output_device: str = Field(default="default", min_length=1, max_length=255)
+    sound_on_detection: bool = False
     confidence_threshold: float = Field(default=0.35, ge=0.05, le=0.95)
     cooldown_seconds: int = Field(default=60, ge=1, le=3600)
     retention_days: int = Field(default=7, ge=1, le=365)

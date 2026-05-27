@@ -89,6 +89,7 @@ Dashboard settings:
 
 - Camera device
 - Audio output device
+- Play sound on detection
 - Detection enabled
 - Confidence threshold
 - Cooldown seconds between saved events
