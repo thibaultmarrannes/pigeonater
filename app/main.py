@@ -8,13 +8,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.cameras import list_camera_devices
-from app.config import get_config
+from app.config import get_config, resolve_version
 from app.detector import DetectorWorker
 from app.preview import capture_preview_frame
 from app.schemas import CameraDevice, DetectorSettings, StatusResponse
 from app.storage import Storage
 
 config = get_config()
+version_info = resolve_version(config)
 storage = Storage(config.database_path, config.snapshot_dir)
 detector = DetectorWorker(config, storage)
 templates = Jinja2Templates(directory="app/templates")
@@ -35,17 +36,17 @@ app.mount("/snapshots", StaticFiles(directory=str(config.snapshot_dir)), name="s
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return templates.TemplateResponse(request, "dashboard.html")
+    return templates.TemplateResponse(request, "dashboard.html", {"version_info": version_info})
 
 
 @app.get("/events", response_class=HTMLResponse)
 async def events_page(request: Request):
-    return templates.TemplateResponse(request, "events.html")
+    return templates.TemplateResponse(request, "events.html", {"version_info": version_info})
 
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
-    return templates.TemplateResponse(request, "settings.html")
+    return templates.TemplateResponse(request, "settings.html", {"version_info": version_info})
 
 
 @app.get("/api/status", response_model=StatusResponse)
@@ -62,6 +63,11 @@ async def api_status() -> StatusResponse:
         model_name=config.model_name,
         settings=settings,
     )
+
+
+@app.get("/api/version")
+async def api_version():
+    return version_info
 
 
 @app.get("/api/events")

@@ -73,6 +73,12 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/production' }}
 
+      - name: Set build metadata
+        id: build_meta
+        run: |
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -80,5 +86,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PIGEONATER_VERSION=${{ steps.build_meta.outputs.date }}-${{ steps.build_meta.outputs.short_sha }}
+            PIGEONATER_COMMIT=${{ github.sha }}
+            PIGEONATER_BUILD_DATE=${{ steps.build_meta.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

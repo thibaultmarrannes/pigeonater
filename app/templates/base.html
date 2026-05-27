@@ -18,8 +18,10 @@
     <main>
       {% block content %}{% endblock %}
     </main>
+    <footer class="app-footer">
+      <span>Version {{ version_info.version }}</span>
+    </footer>
     <script src="/static/app.js"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>
-

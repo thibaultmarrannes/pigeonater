@@ -17,6 +17,16 @@ def test_status_endpoint_returns_settings():
     assert body["model_name"]
 
 
+def test_version_endpoint_returns_version():
+    with TestClient(app) as client:
+        response = client.get("/api/version")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"version", "commit", "build_date"}
+    assert body["version"]
+
+
 def test_page_routes_render():
     storage.update_settings(DetectorSettings(enabled=False))
     with TestClient(app) as client:

@@ -60,6 +60,15 @@ main {
   padding: 28px clamp(16px, 4vw, 44px) 48px;
 }
 
+.app-footer {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 0 clamp(16px, 4vw, 44px) 24px;
+  text-align: right;
+}
+
 .page-head {
   align-items: end;
   display: flex;
