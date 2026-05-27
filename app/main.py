@@ -33,17 +33,17 @@ app.mount("/snapshots", StaticFiles(directory=str(config.snapshot_dir)), name="s
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "dashboard.html")
 
 
 @app.get("/events", response_class=HTMLResponse)
 async def events_page(request: Request):
-    return templates.TemplateResponse("events.html", {"request": request})
+    return templates.TemplateResponse(request, "events.html")
 
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {"request": request})
+    return templates.TemplateResponse(request, "settings.html")
 
 
 @app.get("/api/status", response_model=StatusResponse)
