@@ -8,6 +8,7 @@ V1 intentionally treats pretrained `bird` detections as pigeon candidates. The s
 
 - FastAPI dashboard on port `8080`
 - Logitech-style USB webcam input selectable from the Settings page
+- Audio output selection with a test beep from the Settings page
 - Ultralytics YOLO pretrained detector
 - SQLite event/settings database
 - Snapshot evidence with bounding boxes
@@ -43,6 +44,7 @@ The Compose file maps the camera device and persists data:
 ```yaml
 device_cgroup_rules:
   - "c 81:* rmw"
+  - "c 116:* rmw"
 volumes:
   - ./data:/data
   - /dev:/dev
@@ -86,6 +88,7 @@ Environment variables:
 Dashboard settings:
 
 - Camera device
+- Audio output device
 - Detection enabled
 - Confidence threshold
 - Cooldown seconds between saved events

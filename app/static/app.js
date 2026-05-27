@@ -127,9 +127,11 @@ function settingsPage() {
     data() {
       return {
         cameras: [],
+        audioDevices: [],
         form: {
           enabled: false,
           camera_device: "/dev/video0",
+          output_device: "default",
           confidence_threshold: 0.35,
           cooldown_seconds: 60,
           retention_days: 7,
@@ -138,6 +140,8 @@ function settingsPage() {
         previewUrl: "",
         previewEmpty: "No preview loaded.",
         previewError: "",
+        audioMessage: "",
+        audioError: "",
       };
     },
     async mounted() {
@@ -151,9 +155,17 @@ function settingsPage() {
       cameraLabel(camera) {
         return `${camera.path}${camera.available ? "" : " (not available)"}`;
       },
+      audioDeviceLabel(device) {
+        return `${device.name}${device.available ? "" : " (not available)"}`;
+      },
       async load() {
-        const [status, cameras] = await Promise.all([requestJson("/api/status"), requestJson("/api/cameras")]);
+        const [status, cameras, audioDevices] = await Promise.all([
+          requestJson("/api/status"),
+          requestJson("/api/cameras"),
+          requestJson("/api/audio/devices"),
+        ]);
         this.cameras = cameras;
+        this.audioDevices = audioDevices;
         this.form = { ...status.settings };
       },
       async saveSettings() {
@@ -164,6 +176,8 @@ function settingsPage() {
             body: JSON.stringify(this.form),
           });
           this.message = "Settings saved.";
+          this.audioMessage = "";
+          this.audioError = "";
           await this.load();
           await this.refreshPreview();
         } catch (error) {
@@ -191,6 +205,17 @@ function settingsPage() {
         } catch (error) {
           this.previewError = error.message;
           this.previewEmpty = "Preview unavailable.";
+        }
+      },
+      async playTestBeep() {
+        this.audioMessage = "Playing test beep...";
+        this.audioError = "";
+        try {
+          await requestJson("/api/audio/test-beep", { method: "POST" });
+          this.audioMessage = "Test beep played.";
+        } catch (error) {
+          this.audioMessage = "";
+          this.audioError = error.message;
         }
       },
       revokePreviewUrl() {

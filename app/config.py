@@ -20,6 +20,8 @@ class AppConfig(BaseSettings):
     camera_read_timeout_seconds: float = 2.0
     model_detect_timeout_seconds: float = 10.0
     detector_stop_timeout_seconds: float = 2.0
+    audio_discovery_timeout_seconds: float = 1.0
+    audio_playback_timeout_seconds: float = 3.0
     pigeonater_version: str = "dev"
     pigeonater_commit: str = "unknown"
     pigeonater_build_date: str = "unknown"

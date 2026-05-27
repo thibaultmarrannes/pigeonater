@@ -245,6 +245,11 @@ dd {
   min-width: 0;
 }
 
+.audio-test {
+  grid-column: 2;
+  min-width: 0;
+}
+
 .preview-frame {
   align-items: center;
   aspect-ratio: 4 / 3;
@@ -287,6 +292,10 @@ input[type="checkbox"] {
   .settings-layout,
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .audio-test {
+    grid-column: auto;
   }
 
   .event-item {

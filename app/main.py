@@ -11,7 +11,8 @@ from app.cameras import list_camera_devices
 from app.config import get_config, resolve_version
 from app.detector import DetectorWorker
 from app.preview import capture_preview_frame
-from app.schemas import CameraDevice, DetectorSettings, StatusResponse
+from app.audio import list_audio_output_devices, play_test_beep
+from app.schemas import AudioOutputDevice, CameraDevice, DetectorSettings, StatusResponse
 from app.storage import Storage
 
 config = get_config()
@@ -94,6 +95,41 @@ async def api_cameras():
     except Exception as exc:
         detector.last_error = f"Camera discovery failed: {exc}"
         return [CameraDevice(path=settings.camera_device, selected=True, available=False)]
+
+
+@app.get("/api/audio/devices", response_model=list[AudioOutputDevice])
+async def api_audio_devices():
+    settings = storage.get_settings()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(list_audio_output_devices, settings.output_device),
+            timeout=config.audio_discovery_timeout_seconds,
+        )
+    except TimeoutError:
+        detector.last_error = "Audio output discovery timed out"
+        return [AudioOutputDevice(id=settings.output_device, name=settings.output_device, selected=True, available=False)]
+    except Exception as exc:
+        detector.last_error = f"Audio output discovery failed: {exc}"
+        return [AudioOutputDevice(id=settings.output_device, name=settings.output_device, selected=True, available=False)]
+
+
+@app.post("/api/audio/test-beep")
+async def api_audio_test_beep():
+    settings = storage.get_settings()
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(play_test_beep, settings.output_device),
+            timeout=config.audio_playback_timeout_seconds,
+        )
+    except TimeoutError:
+        detector.last_error = "Test beep timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+
+    if not result.ok:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error)
+
+    return {"ok": True}
 
 
 @app.get("/api/camera/preview")

@@ -20,6 +20,12 @@
       </select>
     </label>
     <label>
+      <span>Audio output</span>
+      <select v-model="form.output_device">
+        <option v-for="device in audioDevices" :key="device.id" :value="device.id" v-text="audioDeviceLabel(device)"></option>
+      </select>
+    </label>
+    <label>
       <span>Confidence threshold</span>
       <input type="number" v-model.number="form.confidence_threshold" min="0.05" max="0.95" step="0.05">
     </label>
@@ -45,6 +51,16 @@
       <p v-else class="empty" v-text="previewEmpty"></p>
     </div>
     <p class="error" v-text="previewError"></p>
+  </aside>
+
+  <aside class="panel audio-test">
+    <div class="panel-head">
+      <h2>Audio test</h2>
+      <button class="secondary" type="button" @click="playTestBeep">Play beep</button>
+    </div>
+    <p class="empty">Use this to verify the selected output device before enabling detection sounds later.</p>
+    <p v-text="audioMessage"></p>
+    <p class="error" v-text="audioError"></p>
   </aside>
   </section>
 </div>

@@ -73,6 +73,61 @@ def test_cameras_endpoint_times_out_quickly(monkeypatch):
     assert response.json() == [{"path": "/dev/video0", "selected": True, "available": False}]
 
 
+def test_audio_devices_endpoint_times_out_quickly(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, output_device="default"))
+    monkeypatch.setattr(config, "audio_discovery_timeout_seconds", 0.05)
+
+    def slow_audio_discovery(*args, **kwargs):
+        time.sleep(0.2)
+        return []
+
+    monkeypatch.setattr("app.main.list_audio_output_devices", slow_audio_discovery)
+
+    start = time.monotonic()
+    with TestClient(app) as client:
+        response = client.get("/api/audio/devices")
+    elapsed = time.monotonic() - start
+
+    assert response.status_code == 200
+    assert elapsed < 0.5
+    assert response.json() == [{"id": "default", "name": "default", "selected": True, "available": False}]
+
+
+def test_audio_test_beep_endpoint(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, output_device="default"))
+
+    def fake_beep(output_device):
+        from app.audio import TestBeepResult
+
+        return TestBeepResult(ok=True)
+
+    monkeypatch.setattr("app.main.play_test_beep", fake_beep)
+
+    with TestClient(app) as client:
+        response = client.post("/api/audio/test-beep")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_audio_test_beep_endpoint_reports_failure(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, output_device="default"))
+
+    def fake_beep(output_device):
+        from app.audio import TestBeepResult
+
+        return TestBeepResult(ok=False, error="beep failed")
+
+    monkeypatch.setattr("app.main.play_test_beep", fake_beep)
+
+    with TestClient(app) as client:
+        response = client.post("/api/audio/test-beep")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "beep failed"
+    assert detector.last_error == "beep failed"
+
+
 def test_camera_preview_endpoint_returns_jpeg(monkeypatch):
     storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
 

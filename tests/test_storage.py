@@ -8,7 +8,14 @@ def test_settings_round_trip(tmp_path):
     storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
 
     settings = storage.update_settings(
-        DetectorSettings(enabled=False, confidence_threshold=0.5, cooldown_seconds=12, retention_days=7)
+        DetectorSettings(
+            enabled=False,
+            camera_device="/dev/video2",
+            output_device="1",
+            confidence_threshold=0.5,
+            cooldown_seconds=12,
+            retention_days=7,
+        )
     )
 
     assert settings == storage.get_settings()
@@ -42,4 +49,3 @@ def test_cleanup_old_events_removes_records_and_snapshots(tmp_path):
     assert not old_snapshot.exists()
     assert fresh_snapshot.exists()
     assert len(storage.list_events()) == 1
-
