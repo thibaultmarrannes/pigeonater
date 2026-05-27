@@ -61,3 +61,39 @@ def test_cameras_endpoint_times_out_quickly(monkeypatch):
     assert response.status_code == 200
     assert elapsed < 0.5
     assert response.json() == [{"path": "/dev/video0", "selected": True, "available": False}]
+
+
+def test_camera_preview_endpoint_returns_jpeg(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
+
+    async def fake_preview(camera_device, timeout_seconds):
+        from app.preview import PreviewResult
+
+        return PreviewResult(ok=True, image=b"\xff\xd8jpeg")
+
+    monkeypatch.setattr("app.main.capture_preview_frame", fake_preview)
+
+    with TestClient(app) as client:
+        response = client.get("/api/camera/preview")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == b"\xff\xd8jpeg"
+
+
+def test_camera_preview_endpoint_reports_failure(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
+
+    async def fake_preview(camera_device, timeout_seconds):
+        from app.preview import PreviewResult
+
+        return PreviewResult(ok=False, error="preview failed")
+
+    monkeypatch.setattr("app.main.capture_preview_frame", fake_preview)
+
+    with TestClient(app) as client:
+        response = client.get("/api/camera/preview")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "preview failed"
+    assert detector.last_error == "preview failed"

@@ -83,6 +83,34 @@ function eventsPage() {
 async function settingsPage() {
   const form = document.querySelector("#settings-form");
   const message = document.querySelector("#settings-message");
+  const previewImage = document.querySelector("#camera-preview-image");
+  const previewEmpty = document.querySelector("#camera-preview-empty");
+  const previewMessage = document.querySelector("#camera-preview-message");
+  const refreshPreview = async () => {
+    previewMessage.textContent = "";
+    previewEmpty.textContent = "Loading preview...";
+    previewEmpty.hidden = false;
+    previewImage.hidden = true;
+    try {
+      const response = await fetch(`/api/camera/preview?t=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(body.detail || response.statusText);
+      }
+      const blob = await response.blob();
+      const previousUrl = previewImage.dataset.objectUrl;
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      const nextUrl = URL.createObjectURL(blob);
+      previewImage.dataset.objectUrl = nextUrl;
+      previewImage.src = nextUrl;
+      previewImage.hidden = false;
+      previewEmpty.hidden = true;
+    } catch (error) {
+      previewImage.hidden = true;
+      previewEmpty.textContent = "Preview unavailable.";
+      previewMessage.textContent = error.message;
+    }
+  };
   const [status, cameras] = await Promise.all([requestJson("/api/status"), requestJson("/api/cameras")]);
   form.camera_device.innerHTML = cameras.map((camera) => {
     const suffix = camera.available ? "" : " (not available)";
@@ -93,6 +121,13 @@ async function settingsPage() {
   form.confidence_threshold.value = status.settings.confidence_threshold;
   form.cooldown_seconds.value = status.settings.cooldown_seconds;
   form.retention_days.value = status.settings.retention_days;
+  document.querySelector("#refresh-preview").addEventListener("click", refreshPreview);
+  form.camera_device.addEventListener("change", () => {
+    previewEmpty.textContent = "Save settings to preview the selected camera.";
+    previewEmpty.hidden = false;
+    previewImage.hidden = true;
+    previewMessage.textContent = "";
+  });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     message.textContent = "Saving...";
@@ -106,10 +141,12 @@ async function settingsPage() {
     try {
       await requestJson("/api/settings", { method: "PATCH", body: JSON.stringify(payload) });
       message.textContent = "Settings saved.";
+      await refreshPreview();
     } catch (error) {
       message.textContent = error.message;
     }
   });
+  refreshPreview();
 }
 
 window.Pigeonater = { dashboard, eventsPage, settingsPage };

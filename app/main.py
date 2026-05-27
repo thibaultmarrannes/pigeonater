@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.cameras import list_camera_devices
 from app.config import get_config
 from app.detector import DetectorWorker
+from app.preview import capture_preview_frame
 from app.schemas import CameraDevice, DetectorSettings, StatusResponse
 from app.storage import Storage
 
@@ -87,6 +88,20 @@ async def api_cameras():
     except Exception as exc:
         detector.last_error = f"Camera discovery failed: {exc}"
         return [CameraDevice(path=settings.camera_device, selected=True, available=False)]
+
+
+@app.get("/api/camera/preview")
+async def api_camera_preview():
+    settings = storage.get_settings()
+    result = await capture_preview_frame(settings.camera_device, config.camera_read_timeout_seconds)
+    if not result.ok or result.image is None:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error)
+    return Response(
+        content=result.image,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @app.get("/api/events/{event_id}")
