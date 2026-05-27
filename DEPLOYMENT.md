@@ -4,15 +4,15 @@ This project is designed to publish a Docker image from GitHub Actions and let t
 
 ## Image Publishing
 
-The workflow in `.github/workflows/container.yml` does this on pushes to `DEV`, `main`, or `master`:
+The workflow in `.github/workflows/container.yml` does this on pushes to `DEV`, `production`, `main`, or `master`:
 
 1. Install Python dependencies.
 2. Run `pytest`.
 3. Build the Docker image.
 4. Push tags to GitHub Container Registry:
-   - `ghcr.io/<owner>/<repo>:DEV`, `:main`, or `:master`
+   - `ghcr.io/<owner>/<repo>:DEV`, `:production`, `:main`, or `:master`
    - `ghcr.io/<owner>/<repo>:sha-<commit>`
-   - `ghcr.io/<owner>/<repo>:latest` on the default branch
+   - `ghcr.io/<owner>/<repo>:latest` only from the `production` branch
    - `ghcr.io/<owner>/<repo>:vX.Y.Z` for git tags like `v1.0.0`
 
 Pull requests run tests only and do not publish images.
@@ -58,7 +58,7 @@ Open `http://<nuc-ip>:8080`, go to Settings, and select the visible `/dev/video*
 
 ## Lighthouse or Auto-Updater Flow
 
-Point Lighthouse at the image tag you want to track, usually:
+Point Lighthouse at the stable production image:
 
 ```text
 ghcr.io/<owner>/<repo>:latest
@@ -69,6 +69,13 @@ When GitHub Actions publishes a new image for that tag, Lighthouse can pull it a
 ```text
 GET /healthz
 ```
+
+## Branch Flow
+
+- Commit active development to `DEV`.
+- Use `ghcr.io/thibaultmarrannes/pigeonater:DEV` for test devices that should follow development builds.
+- Merge or fast-forward `production` when a version should roll out to remote production devices.
+- Production devices should track `ghcr.io/thibaultmarrannes/pigeonater:latest`.
 
 ## Rollback
 

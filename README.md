@@ -50,7 +50,7 @@ volumes:
 
 ## Production Images
 
-GitHub Actions can test the app, build the Docker image, and push it to GitHub Container Registry. Remote NUCs can then run `docker-compose.prod.yml` and track the published `latest` image tag from the default branch.
+GitHub Actions can test the app, build the Docker image, and push it to GitHub Container Registry. Remote NUCs can then run `docker-compose.prod.yml` and track the published `latest` image tag from the `production` branch.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the GitHub Actions, GHCR, Lighthouse, and rollback flow.
 

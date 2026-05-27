@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - DEV
+      - production
       - main
       - master
     tags:
@@ -70,7 +71,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/production' }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
