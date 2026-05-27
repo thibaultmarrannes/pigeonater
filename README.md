@@ -1,6 +1,6 @@
-# Pidgeonater
+# Pigeonater
 
-Pidgeonater is a small LAN appliance for watching a USB webcam, detecting bird events as pigeon candidates, saving evidence snapshots, and reviewing activity from a web dashboard.
+Pigeonater is a small LAN appliance for watching a USB webcam, detecting bird events as pigeon candidates, saving evidence snapshots, and reviewing activity from a web dashboard.
 
 V1 intentionally treats pretrained `bird` detections as pigeon candidates. The saved snapshots and metadata are the basis for later threshold tuning or custom pigeon-specific training.
 

@@ -112,4 +112,4 @@ async function settingsPage() {
   });
 }
 
-window.Pidgeonater = { dashboard, eventsPage, settingsPage };
+window.Pigeonater = { dashboard, eventsPage, settingsPage };

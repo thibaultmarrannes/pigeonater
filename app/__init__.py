@@ -1,2 +1,2 @@
-"""Pidgeonater application package."""
+"""Pigeonater application package."""
 

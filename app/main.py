@@ -26,7 +26,7 @@ async def lifespan(_: FastAPI):
     await detector.stop()
 
 
-app = FastAPI(title="Pidgeonater", lifespan=lifespan)
+app = FastAPI(title="Pigeonater", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/snapshots", StaticFiles(directory=str(config.snapshot_dir)), name="snapshots")
 

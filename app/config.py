@@ -10,7 +10,7 @@ class AppConfig(BaseSettings):
 
     data_dir: Path = Path("data")
     snapshot_dir: Path = Path("data/snapshots")
-    database_path: Path = Path("data/pidgeonater.sqlite3")
+    database_path: Path = Path("data/pigeonater.sqlite3")
     model_name: str = "yolo11n.pt"
     action_webhook_url: str | None = None
     detector_poll_seconds: float = 0.2

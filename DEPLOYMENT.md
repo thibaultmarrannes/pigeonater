@@ -107,7 +107,7 @@ Each build also publishes a commit-specific tag:
 ghcr.io/<owner>/<repo>:sha-<commit>
 ```
 
-To roll back, set `PIDGEONATER_IMAGE` to a known-good SHA tag and restart:
+To roll back, set `PIGEONATER_IMAGE` to a known-good SHA tag and restart:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull

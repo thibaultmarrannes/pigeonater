@@ -1,5 +1,5 @@
 [project]
-name = "pidgeonater"
+name = "pigeonater"
 version = "0.1.0"
 description = "LAN dashboard and detector for pigeon candidate events from a webcam."
 requires-python = ">=3.11"

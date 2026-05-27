@@ -1,7 +1,9 @@
+name: pigeonater
+
 services:
-  pidgeonater:
-    image: "${PIDGEONATER_IMAGE:-ghcr.io/thibaultmarrannes/pigeonater:latest}"
-    container_name: pidgeonater
+  pigeonater:
+    image: "${PIGEONATER_IMAGE:-ghcr.io/thibaultmarrannes/pigeonater:latest}"
+    container_name: pigeonater
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -10,7 +12,7 @@ services:
     environment:
       DATA_DIR: "/data"
       SNAPSHOT_DIR: "/data/snapshots"
-      DATABASE_PATH: "/data/pidgeonater.sqlite3"
+      DATABASE_PATH: "/data/pigeonater.sqlite3"
       MODEL_NAME: "${MODEL_NAME:-yolo11n.pt}"
       ACTION_WEBHOOK_URL: "${ACTION_WEBHOOK_URL:-}"
     volumes:
