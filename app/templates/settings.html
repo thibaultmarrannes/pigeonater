@@ -66,6 +66,29 @@
     <p v-text="audioMessage"></p>
     <p class="error" v-text="audioError"></p>
   </aside>
+
+  <aside class="panel audio-diagnostics">
+    <div class="panel-head">
+      <h2>Audio diagnostics</h2>
+      <button class="secondary" type="button" @click="refreshAudioDiagnostics">Refresh</button>
+    </div>
+    <dl v-if="audioDiagnostics">
+      <dt>Backend</dt><dd v-text="audioDiagnostics.backend"></dd>
+      <dt>Default output</dt><dd v-text="audioDiagnostics.default_output_name || 'None'"></dd>
+      <dt>Selected output</dt><dd v-text="audioDiagnostics.selected_output_id"></dd>
+      <dt>Selected available</dt><dd v-text="audioDiagnostics.selected_output_available ? 'Yes' : 'No'"></dd>
+      <dt>Visible outputs</dt><dd v-text="audioDiagnostics.available_output_count"></dd>
+      <dt>`/dev/snd`</dt><dd v-text="audioDiagnostics.dev_snd_present ? audioDiagnostics.dev_snd_entries.join(', ') : 'Not visible'"></dd>
+      <dt>Host APIs</dt><dd v-text="audioDiagnostics.host_apis.length ? audioDiagnostics.host_apis.join(', ') : 'None'"></dd>
+      <dt>Pulse server</dt><dd v-text="audioDiagnostics.pulse_server || 'Not set'"></dd>
+      <dt>Pulse runtime</dt><dd v-text="audioDiagnostics.pulse_runtime_present ? 'Present' : 'Not present'"></dd>
+      <dt>`aplay -l`</dt><dd v-text="audioDiagnostics.aplay_devices.length ? audioDiagnostics.aplay_devices.join(' | ') : 'No ALSA playback devices reported'"></dd>
+      <dt>Recommended fix</dt><dd v-text="audioDiagnostics.recommended_fix || 'None'"></dd>
+      <dt>Errors</dt><dd v-text="audioDiagnostics.errors.length ? audioDiagnostics.errors.join(' | ') : 'None'"></dd>
+    </dl>
+    <p v-else class="empty">Diagnostics unavailable.</p>
+    <p class="error" v-text="diagnosticsError"></p>
+  </aside>
   </section>
 </div>
 {% endblock %}

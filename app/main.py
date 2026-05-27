@@ -11,8 +11,8 @@ from app.cameras import list_camera_devices
 from app.config import get_config, resolve_version
 from app.detector import DetectorWorker
 from app.preview import capture_preview_frame
-from app.audio import list_audio_output_devices, play_test_beep
-from app.schemas import AudioOutputDevice, CameraDevice, DetectorSettings, StatusResponse
+from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep
+from app.schemas import AudioDiagnostics, AudioOutputDevice, CameraDevice, DetectorSettings, StatusResponse
 from app.storage import Storage
 
 config = get_config()
@@ -111,6 +111,22 @@ async def api_audio_devices():
     except Exception as exc:
         detector.last_error = f"Audio output discovery failed: {exc}"
         return [AudioOutputDevice(id=settings.output_device, name=settings.output_device, selected=True, available=False)]
+
+
+@app.get("/api/audio/diagnostics", response_model=AudioDiagnostics)
+async def api_audio_diagnostics():
+    settings = storage.get_settings()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(get_audio_diagnostics, settings.output_device),
+            timeout=config.audio_discovery_timeout_seconds + 1.0,
+        )
+    except TimeoutError:
+        detector.last_error = "Audio diagnostics timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+    except Exception as exc:
+        detector.last_error = f"Audio diagnostics failed: {exc}"
+        raise HTTPException(status_code=503, detail=detector.last_error)
 
 
 @app.post("/api/audio/test-beep")

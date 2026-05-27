@@ -1,4 +1,4 @@
-from app.audio import list_audio_output_devices, play_test_beep
+from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep
 
 
 class FakeSoundDevice:
@@ -7,17 +7,23 @@ class FakeSoundDevice:
         self.stopped = False
         self.default = type("Default", (), {"device": [0, 1]})()
 
-    def query_devices(self):
-        return [
+    def query_devices(self, device=None, kind=None):
+        devices = [
             {"name": "Input only", "max_output_channels": 0},
             {"name": "Built-in speakers", "max_output_channels": 2},
         ]
+        if device is None:
+            return devices
+        return devices[int(device)]
 
     def play(self, data, *, samplerate, device, blocking):
         self.play_calls.append({"shape": data.shape, "samplerate": samplerate, "device": device, "blocking": blocking})
 
     def stop(self):
         self.stopped = True
+
+    def query_hostapis(self):
+        return [{"name": "Core Audio"}]
 
 
 class FakeDefaultPair:
@@ -102,3 +108,33 @@ def test_play_test_beep_reports_failure(monkeypatch):
 
     assert result.ok is False
     assert "no output" in result.error
+
+
+def test_get_audio_diagnostics_reports_linux_visibility(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._dev_snd_entries", lambda: ["controlC0", "pcmC0D0p"])
+    monkeypatch.setattr("app.audio._pulse_runtime_present", lambda: False)
+    monkeypatch.setattr("app.audio._aplay_devices", lambda errors: ["card 0: Device [USB Audio Device], device 0: USB Audio [USB Audio]"])
+
+    diagnostics = get_audio_diagnostics("default")
+
+    assert diagnostics.backend == "portaudio"
+    assert diagnostics.default_output_id == "1"
+    assert diagnostics.default_output_name == "Built-in speakers"
+    assert diagnostics.available_output_count == 1
+    assert diagnostics.dev_snd_present is True
+    assert diagnostics.selected_output_available is True
+    assert diagnostics.host_apis == ["Core Audio"]
+    assert diagnostics.aplay_devices
+
+
+def test_get_audio_diagnostics_recommends_mounting_dev_snd(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._dev_snd_entries", lambda: [])
+    monkeypatch.setattr("app.audio._pulse_runtime_present", lambda: False)
+    monkeypatch.setattr("app.audio._aplay_devices", lambda errors: [])
+
+    diagnostics = get_audio_diagnostics("default")
+
+    assert diagnostics.dev_snd_present is False
+    assert "Mount /dev/snd" in diagnostics.recommended_fix

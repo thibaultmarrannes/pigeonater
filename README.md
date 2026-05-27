@@ -9,6 +9,7 @@ V1 intentionally treats pretrained `bird` detections as pigeon candidates. The s
 - FastAPI dashboard on port `8080`
 - Logitech-style USB webcam input selectable from the Settings page
 - Audio output selection with a test beep from the Settings page
+- Audio diagnostics for Linux speaker troubleshooting from the Settings page
 - Ultralytics YOLO pretrained detector
 - SQLite event/settings database
 - Snapshot evidence with bounding boxes
@@ -42,6 +43,8 @@ Open `http://<nuc-ip>:8080` from another device on the home network.
 The Compose file maps the camera device and persists data:
 
 ```yaml
+devices:
+  - /dev/snd:/dev/snd
 device_cgroup_rules:
   - "c 81:* rmw"
   - "c 116:* rmw"
@@ -100,6 +103,9 @@ Dashboard settings:
 - `GET /api/status`
 - `GET /api/events`
 - `GET /api/events/{id}`
+- `GET /api/audio/devices`
+- `GET /api/audio/diagnostics`
+- `POST /api/audio/test-beep`
 - `PATCH /api/settings`
 - `POST /api/detector/start`
 - `POST /api/detector/stop`
@@ -107,5 +113,6 @@ Dashboard settings:
 ## Notes
 
 - The first detector startup downloads the configured YOLO weights if they are not already present in the container.
+- On Ubuntu, audio works best with direct ALSA device access. The container now mounts `/dev/snd`, and the Settings page exposes audio diagnostics so you can confirm what the container can actually see.
 - The app is designed for LAN-only access in V1. It does not include authentication or HTTPS.
 - `ACTION_WEBHOOK_URL` is present as an integration point, but no physical deterrent is configured by default.

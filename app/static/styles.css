@@ -250,6 +250,11 @@ dd {
   min-width: 0;
 }
 
+.audio-diagnostics {
+  grid-column: 2;
+  min-width: 0;
+}
+
 .preview-frame {
   align-items: center;
   aspect-ratio: 4 / 3;
@@ -295,6 +300,10 @@ input[type="checkbox"] {
   }
 
   .audio-test {
+    grid-column: auto;
+  }
+
+  .audio-diagnostics {
     grid-column: auto;
   }
 

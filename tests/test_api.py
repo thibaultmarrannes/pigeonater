@@ -128,6 +128,39 @@ def test_audio_test_beep_endpoint_reports_failure(monkeypatch):
     assert detector.last_error == "beep failed"
 
 
+def test_audio_diagnostics_endpoint(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, output_device="default"))
+
+    def fake_diagnostics(output_device):
+        return {
+            "backend": "portaudio",
+            "default_output_id": "1",
+            "default_output_name": "Built-in speakers",
+            "selected_output_id": output_device,
+            "selected_output_available": True,
+            "available_output_count": 1,
+            "dev_snd_present": True,
+            "dev_snd_entries": ["controlC0", "pcmC0D0p"],
+            "pulse_server": None,
+            "pulse_runtime_present": False,
+            "host_apis": ["ALSA"],
+            "aplay_devices": ["card 0: Device [USB Audio Device], device 0: USB Audio [USB Audio]"],
+            "errors": [],
+            "recommended_fix": None,
+        }
+
+    monkeypatch.setattr("app.main.get_audio_diagnostics", fake_diagnostics)
+
+    with TestClient(app) as client:
+        response = client.get("/api/audio/diagnostics")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["backend"] == "portaudio"
+    assert body["selected_output_id"] == "default"
+    assert body["dev_snd_present"] is True
+
+
 def test_camera_preview_endpoint_returns_jpeg(monkeypatch):
     storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
 

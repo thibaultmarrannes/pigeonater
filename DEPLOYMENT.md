@@ -23,9 +23,10 @@ Install Docker and confirm the webcam is visible:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-plugin git v4l-utils
+sudo apt-get install -y docker.io docker-compose-plugin git v4l-utils alsa-utils
 sudo usermod -aG docker "$USER"
 v4l2-ctl --list-devices
+aplay -l
 ```
 
 Log out and back in after adding your user to the Docker group.
@@ -77,6 +78,23 @@ docker compose -f docker-compose.prod.yml logs -f
 ```
 
 Open `http://<nuc-ip>:8080`, go to Settings, and select the visible `/dev/video*` camera.
+For audio, open the Settings page and use the Audio diagnostics panel. On Ubuntu, you want `/dev/snd` to be visible there and `aplay -l` to show at least one playback device.
+
+If audio still does not work on the NUC:
+
+```bash
+ls -la /dev/snd
+aplay -l
+docker compose -f docker-compose.prod.yml exec pigeonater ls -la /dev/snd
+docker compose -f docker-compose.prod.yml exec pigeonater aplay -l
+```
+
+If the host sees the speaker but the container does not, restart the service after confirming `docker-compose.prod.yml` still includes:
+
+```yaml
+devices:
+  - /dev/snd:/dev/snd
+```
 
 ## Lighthouse or Auto-Updater Flow
 

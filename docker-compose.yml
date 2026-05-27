@@ -5,6 +5,8 @@ services:
     build: .
     container_name: pigeonater
     restart: unless-stopped
+    devices:
+      - /dev/snd:/dev/snd
     ports:
       - "8080:8080"
     device_cgroup_rules:

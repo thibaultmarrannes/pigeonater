@@ -47,6 +47,23 @@ class AudioOutputDevice(BaseModel):
     available: bool
 
 
+class AudioDiagnostics(BaseModel):
+    backend: str
+    default_output_id: str | None
+    default_output_name: str | None
+    selected_output_id: str
+    selected_output_available: bool
+    available_output_count: int
+    dev_snd_present: bool
+    dev_snd_entries: list[str]
+    pulse_server: str | None
+    pulse_runtime_present: bool
+    host_apis: list[str]
+    aplay_devices: list[str]
+    errors: list[str]
+    recommended_fix: str | None
+
+
 class StatusResponse(BaseModel):
     detector_enabled: bool
     worker_running: bool

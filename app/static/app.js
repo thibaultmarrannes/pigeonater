@@ -128,6 +128,7 @@ function settingsPage() {
       return {
         cameras: [],
         audioDevices: [],
+        audioDiagnostics: null,
         form: {
           enabled: false,
           camera_device: "/dev/video0",
@@ -143,6 +144,7 @@ function settingsPage() {
         previewError: "",
         audioMessage: "",
         audioError: "",
+        diagnosticsError: "",
       };
     },
     async mounted() {
@@ -168,6 +170,7 @@ function settingsPage() {
         this.cameras = cameras;
         this.audioDevices = audioDevices;
         this.form = { ...status.settings };
+        await this.refreshAudioDiagnostics();
       },
       async saveSettings() {
         this.message = "Saving...";
@@ -214,9 +217,20 @@ function settingsPage() {
         try {
           await requestJson("/api/audio/test-beep", { method: "POST" });
           this.audioMessage = "Test beep played.";
+          await this.refreshAudioDiagnostics();
         } catch (error) {
           this.audioMessage = "";
           this.audioError = error.message;
+          await this.refreshAudioDiagnostics();
+        }
+      },
+      async refreshAudioDiagnostics() {
+        this.diagnosticsError = "";
+        try {
+          this.audioDiagnostics = await requestJson("/api/audio/diagnostics");
+        } catch (error) {
+          this.audioDiagnostics = null;
+          this.diagnosticsError = error.message;
         }
       },
       revokePreviewUrl() {
