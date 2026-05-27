@@ -1,0 +1,50 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class DetectionBox(BaseModel):
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+
+class DetectionEvent(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    label: str
+    confidence: float
+    box: DetectionBox
+    snapshot_path: str
+    snapshot_url: str
+    webhook_sent: bool = False
+    webhook_error: str | None = None
+
+
+class DetectorSettings(BaseModel):
+    enabled: bool = True
+    camera_device: str = Field(default="/dev/video0", min_length=1, max_length=255)
+    confidence_threshold: float = Field(default=0.35, ge=0.05, le=0.95)
+    cooldown_seconds: int = Field(default=60, ge=1, le=3600)
+    retention_days: int = Field(default=7, ge=1, le=365)
+
+
+class CameraDevice(BaseModel):
+    path: str
+    selected: bool
+    available: bool
+
+
+class StatusResponse(BaseModel):
+    detector_enabled: bool
+    worker_running: bool
+    camera_connected: bool
+    camera_device: str
+    last_frame_at: datetime | None
+    last_error: str | None
+    last_event_at: datetime | None
+    model_name: str
+    settings: DetectorSettings

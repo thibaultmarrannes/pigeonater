@@ -1,0 +1,2 @@
+"""Pidgeonater application package."""
+

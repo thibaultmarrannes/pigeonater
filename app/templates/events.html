@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Evidence</p>
+    <h1>Detection events</h1>
+  </div>
+</section>
+<div id="events-page-list" class="event-list wide"></div>
+{% endblock %}
+{% block scripts %}
+<script>window.Pidgeonater.eventsPage();</script>
+{% endblock %}
+

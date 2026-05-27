@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">LAN appliance</p>
+    <h1>Pigeon candidate monitor</h1>
+  </div>
+  <div class="actions">
+    <button id="start-detector">Start</button>
+    <button id="stop-detector" class="secondary">Pause</button>
+  </div>
+</section>
+
+<section class="status-grid">
+  <article>
+    <span>Status</span>
+    <strong id="status-running">Loading</strong>
+  </article>
+  <article>
+    <span>Camera</span>
+    <strong id="status-camera">Loading</strong>
+  </article>
+  <article>
+    <span>Last frame</span>
+    <strong id="status-frame">Never</strong>
+  </article>
+  <article>
+    <span>Last event</span>
+    <strong id="status-event">Never</strong>
+  </article>
+</section>
+
+<section class="split">
+  <div>
+    <h2>Latest detections</h2>
+    <div id="latest-events" class="event-list"></div>
+  </div>
+  <aside class="panel">
+    <h2>Configuration</h2>
+    <dl id="settings-summary"></dl>
+    <p id="status-error" class="error"></p>
+  </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>window.Pidgeonater.dashboard();</script>
+{% endblock %}
+
