@@ -5,6 +5,7 @@ class FakeSoundDevice:
     def __init__(self):
         self.play_calls = []
         self.stopped = False
+        self.default = type("Default", (), {"device": [0, 1]})()
 
     def query_devices(self):
         return [
@@ -17,6 +18,12 @@ class FakeSoundDevice:
 
     def stop(self):
         self.stopped = True
+
+
+class FakeDefaultPair:
+    def __init__(self, input_device, output_device):
+        self.input = input_device
+        self.output = output_device
 
 
 class FailingSoundDevice(FakeSoundDevice):
@@ -54,6 +61,38 @@ def test_play_test_beep_uses_selected_device(monkeypatch):
     assert fake.play_calls[0]["device"] == 1
     assert fake.play_calls[0]["blocking"] is True
     assert fake.stopped is True
+
+
+def test_play_test_beep_resolves_default_output_device(monkeypatch):
+    fake = FakeSoundDevice()
+    monkeypatch.setattr("app.audio.sd", fake)
+
+    result = play_test_beep("default")
+
+    assert result.ok is True
+    assert fake.play_calls[0]["device"] == 1
+
+
+def test_play_test_beep_falls_back_when_default_is_invalid(monkeypatch):
+    fake = FakeSoundDevice()
+    fake.default.device = [-1, -1]
+    monkeypatch.setattr("app.audio.sd", fake)
+
+    result = play_test_beep("default")
+
+    assert result.ok is True
+    assert fake.play_calls[0]["device"] == 1
+
+
+def test_play_test_beep_uses_default_pair_output(monkeypatch):
+    fake = FakeSoundDevice()
+    fake.default.device = FakeDefaultPair(0, 1)
+    monkeypatch.setattr("app.audio.sd", fake)
+
+    result = play_test_beep("default")
+
+    assert result.ok is True
+    assert fake.play_calls[0]["device"] == 1
 
 
 def test_play_test_beep_reports_failure(monkeypatch):
