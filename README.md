@@ -52,7 +52,7 @@ volumes:
 
 GitHub Actions can test the app, build the Docker image, and push it to GitHub Container Registry. Remote NUCs can then run `docker-compose.prod.yml` and track the published `latest` image tag from the `production` branch.
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the GitHub Actions, GHCR, Lighthouse, and rollback flow.
+For a NUC, start with [DEPLOYMENT.md](DEPLOYMENT.md). It includes the exact commands to install Docker, clone the production branch or download only the Compose files, start the service, and connect Lighthouse.
 
 ## Ubuntu NUC Setup
 
@@ -69,7 +69,7 @@ v4l2-ctl --list-devices
 
 The Settings page lists visible `/dev/video*` devices. Pick the camera there, then save settings. If no camera appears, confirm the host sees it with `v4l2-ctl --list-devices` and restart the container after plugging it in.
 
-5. Start the app:
+5. For production use, follow [DEPLOYMENT.md](DEPLOYMENT.md). For local source builds, start the app with:
 
 ```bash
 docker compose up -d --build

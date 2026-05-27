@@ -23,7 +23,7 @@ Install Docker and confirm the webcam is visible:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-plugin v4l-utils
+sudo apt-get install -y docker.io docker-compose-plugin git v4l-utils
 sudo usermod -aG docker "$USER"
 v4l2-ctl --list-devices
 ```
@@ -38,20 +38,42 @@ echo "<github-token-with-read-packages>" | docker login ghcr.io -u <github-user>
 
 Public packages do not need a login.
 
+## Get the Compose Files
+
+Recommended: clone the repository on the NUC and use the production branch.
+
+```bash
+mkdir -p ~/apps
+cd ~/apps
+git clone -b production https://github.com/thibaultmarrannes/pigeonater.git
+cd pigeonater
+```
+
+This gives the NUC the production Compose file, `.env.example`, and docs. The app itself still runs from the published GHCR image, not from a local build.
+
+If you do not want a full clone, create a minimal deployment folder instead:
+
+```bash
+mkdir -p ~/apps/pigeonater
+cd ~/apps/pigeonater
+curl -fsSLO https://raw.githubusercontent.com/thibaultmarrannes/pigeonater/production/docker-compose.prod.yml
+curl -fsSLO https://raw.githubusercontent.com/thibaultmarrannes/pigeonater/production/.env.example
+```
+
 ## Production Compose
 
 Create a `.env` file next to `docker-compose.prod.yml`:
 
 ```bash
-PIDGEONATER_IMAGE=ghcr.io/thibaultmarrannes/pigeonater:latest
-MODEL_NAME=yolo11n.pt
-ACTION_WEBHOOK_URL=
+cp .env.example .env
 ```
 
 Start the service:
 
 ```bash
+docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 Open `http://<nuc-ip>:8080`, go to Settings, and select the visible `/dev/video*` camera.
@@ -91,3 +113,18 @@ To roll back, set `PIDGEONATER_IMAGE` to a known-good SHA tag and restart:
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+## Updating the NUC Files
+
+If you cloned the repo, update the deployment files with:
+
+```bash
+cd ~/apps/pigeonater
+git fetch origin
+git checkout production
+git pull --ff-only
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+If Lighthouse manages image updates, it can handle the pull/restart step automatically. You only need to update the repo files when `docker-compose.prod.yml` or deployment docs change.
