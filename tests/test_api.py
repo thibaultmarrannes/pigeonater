@@ -28,6 +28,18 @@ def test_version_endpoint_returns_version():
     assert body["version"]
 
 
+def test_stream_endpoint_returns_event_stream():
+    storage.update_settings(DetectorSettings(enabled=False))
+    with TestClient(app) as client:
+        response = client.get("/api/stream?limit=2&once=true")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: update" in response.text
+    assert '"status"' in response.text
+    assert '"events"' in response.text
+
+
 def test_page_routes_render():
     storage.update_settings(DetectorSettings(enabled=False))
     with TestClient(app) as client:

@@ -1,9 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -53,6 +54,10 @@ async def settings_page(request: Request):
 
 @app.get("/api/status", response_model=StatusResponse)
 async def api_status() -> StatusResponse:
+    return _build_status_response()
+
+
+def _build_status_response() -> StatusResponse:
     settings = storage.get_settings()
     return StatusResponse(
         detector_enabled=settings.enabled,
@@ -80,6 +85,34 @@ async def api_version():
 async def api_events(limit: int = 100):
     limit = min(max(limit, 1), 500)
     return storage.list_events(limit=limit)
+
+
+@app.get("/api/stream")
+async def api_stream(request: Request, limit: int = 100, once: bool = False):
+    limit = min(max(limit, 1), 500)
+
+    async def event_stream():
+        while True:
+            payload = {
+                "status": _build_status_response().model_dump(mode="json"),
+                "events": [event.model_dump(mode="json") for event in storage.list_events(limit=limit)],
+            }
+            yield f"event: update\ndata: {json.dumps(payload)}\n\n"
+            if once:
+                break
+            if await request.is_disconnected():
+                break
+            await asyncio.sleep(2.0)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/cameras", response_model=list[CameraDevice])

@@ -1,5 +1,6 @@
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
+    cache: "no-store",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
@@ -18,6 +19,11 @@ function boxLabel(event) {
   return `Box: ${Math.round(event.box.x1)}, ${Math.round(event.box.y1)} to ${Math.round(event.box.x2)}, ${Math.round(event.box.y2)}`;
 }
 
+function snapshotSrc(event) {
+  const version = encodeURIComponent(`${event.id}-${event.created_at}`);
+  return `${event.snapshot_url}?v=${version}`;
+}
+
 function requireVue() {
   if (!window.Vue) {
     throw new Error("Vue failed to load");
@@ -34,6 +40,7 @@ function dashboard() {
         events: [],
         statusError: "",
         timer: null,
+        stream: null,
       };
     },
     computed: {
@@ -52,14 +59,17 @@ function dashboard() {
     },
     async mounted() {
       await this.refresh();
+      this.connectStream();
       this.timer = setInterval(this.refresh, 3000);
     },
     unmounted() {
       if (this.timer) clearInterval(this.timer);
+      if (this.stream) this.stream.close();
     },
     methods: {
       formatDate,
       boxLabel,
+      snapshotSrc,
       async refresh() {
         try {
           const [status, events] = await Promise.all([
@@ -72,6 +82,19 @@ function dashboard() {
         } catch (error) {
           this.statusError = error.message;
         }
+      },
+      connectStream() {
+        if (!window.EventSource) return;
+        this.stream = new EventSource("/api/stream?limit=5");
+        this.stream.addEventListener("update", (event) => {
+          const payload = JSON.parse(event.data);
+          this.status = payload.status;
+          this.events = payload.events;
+          this.statusError = payload.status.last_error || "";
+        });
+        this.stream.onerror = () => {
+          this.statusError = this.statusError || "Live updates interrupted. Falling back to polling.";
+        };
       },
       async startDetector() {
         try {
@@ -101,18 +124,22 @@ function eventsPage() {
         events: [],
         error: "",
         timer: null,
+        stream: null,
       };
     },
     async mounted() {
       await this.refresh();
+      this.connectStream();
       this.timer = setInterval(this.refresh, 5000);
     },
     unmounted() {
       if (this.timer) clearInterval(this.timer);
+      if (this.stream) this.stream.close();
     },
     methods: {
       formatDate,
       boxLabel,
+      snapshotSrc,
       async refresh() {
         try {
           this.events = await requestJson("/api/events?limit=100");
@@ -120,6 +147,18 @@ function eventsPage() {
         } catch (error) {
           this.error = error.message;
         }
+      },
+      connectStream() {
+        if (!window.EventSource) return;
+        this.stream = new EventSource("/api/stream?limit=100");
+        this.stream.addEventListener("update", (event) => {
+          const payload = JSON.parse(event.data);
+          this.events = payload.events;
+          this.error = "";
+        });
+        this.stream.onerror = () => {
+          this.error = this.error || "Live updates interrupted. Falling back to polling.";
+        };
       },
     },
   }).mount("#events-app");

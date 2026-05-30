@@ -41,7 +41,7 @@
       <div class="event-list">
         <article v-for="event in events" :key="event.id" class="event-item">
           <a :href="event.snapshot_url" target="_blank" rel="noreferrer">
-            <img :src="event.snapshot_url" :alt="`Detection snapshot ${event.id}`">
+            <img :src="snapshotSrc(event)" :alt="`Detection snapshot ${event.id}`">
           </a>
           <div>
             <strong v-text="`${event.label} candidate`"></strong>
