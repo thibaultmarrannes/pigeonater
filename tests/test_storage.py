@@ -13,6 +13,7 @@ def test_settings_round_trip(tmp_path):
             camera_device="/dev/video2",
             output_device="pa:1",
             sound_on_detection=True,
+            selected_sound="custom.wav",
             hardware_serial_device="/dev/serial/by-id/usb-Arduino_Uno-if00",
             hardware_relay_pulse_ms=750,
             hardware_servo_from_angle=20,

@@ -31,6 +31,7 @@ class DetectorSettings(BaseModel):
     camera_device: str = Field(default="/dev/video0", min_length=1, max_length=255)
     output_device: str = Field(default="auto", min_length=1, max_length=255)
     sound_on_detection: bool = False
+    selected_sound: str = Field(default="beep", pattern=r"^(beep|[A-Za-z0-9_.-]+\.wav)$", max_length=255)
     hardware_serial_device: str = Field(
         default="none",
         pattern=r"^(none|/dev/(serial/by-id/[^/]+|ttyACM\d+|ttyUSB\d+))$",
@@ -58,6 +59,13 @@ class AudioOutputDevice(BaseModel):
     name: str
     selected: bool
     available: bool
+
+
+class AudioSound(BaseModel):
+    id: str
+    name: str
+    selected: bool
+    built_in: bool = False
 
 
 class AudioDiagnostics(BaseModel):

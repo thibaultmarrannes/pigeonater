@@ -19,6 +19,7 @@ services:
     environment:
       DATA_DIR: "/data"
       SNAPSHOT_DIR: "/data/snapshots"
+      SOUND_DIR: "/data/sounds"
       DATABASE_PATH: "/data/pigeonater.sqlite3"
       MODEL_NAME: "${MODEL_NAME:-yolo11n.pt}"
       ACTION_WEBHOOK_URL: "${ACTION_WEBHOOK_URL:-}"

@@ -159,8 +159,8 @@ async def test_process_frame_plays_sound_when_enabled(tmp_path, monkeypatch):
     )
     calls = []
 
-    def fake_enqueue_detection_sound(output_device):
-        calls.append(output_device)
+    def fake_enqueue_detection_sound(output_device, selected_sound):
+        calls.append((output_device, selected_sound))
 
     monkeypatch.setattr(worker, "enqueue_detection_sound", fake_enqueue_detection_sound)
     monkeypatch.setattr(worker, "enqueue_event_video", lambda event_id: None)
@@ -168,7 +168,7 @@ async def test_process_frame_plays_sound_when_enabled(tmp_path, monkeypatch):
     created = await worker.process_frame(np.zeros((40, 40, 3), dtype=np.uint8), 0.35, 60)
 
     assert created is True
-    assert calls == ["pa:1"]
+    assert calls == [("pa:1", "beep")]
 
 
 @pytest.mark.asyncio
@@ -187,8 +187,8 @@ async def test_process_frame_does_not_play_sound_when_disabled(tmp_path, monkeyp
     )
     calls = []
 
-    def fake_enqueue_detection_sound(output_device):
-        calls.append(output_device)
+    def fake_enqueue_detection_sound(output_device, selected_sound):
+        calls.append((output_device, selected_sound))
 
     monkeypatch.setattr(worker, "enqueue_detection_sound", fake_enqueue_detection_sound)
     monkeypatch.setattr(worker, "enqueue_event_video", lambda event_id: None)
@@ -212,8 +212,8 @@ async def test_enqueue_detection_sound_drops_when_queue_is_full(tmp_path):
     monkeypatch.setattr(worker, "_ensure_sound_worker", lambda: None)
 
     try:
-        worker.enqueue_detection_sound("auto")
-        worker.enqueue_detection_sound("auto")
+        worker.enqueue_detection_sound("auto", "beep")
+        worker.enqueue_detection_sound("auto", "beep")
 
         assert worker.last_error == "Detection sound skipped because playback is already pending"
     finally:

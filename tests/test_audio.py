@@ -1,4 +1,14 @@
-from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep, resolve_audio_target
+import wave
+
+from app.audio import (
+    get_audio_diagnostics,
+    list_audio_output_devices,
+    list_audio_sounds,
+    play_selected_sound,
+    play_test_beep,
+    resolve_audio_target,
+    save_uploaded_sound,
+)
 
 
 class FakeSoundDevice:
@@ -52,6 +62,47 @@ def test_list_audio_output_devices_prefers_alsa(monkeypatch):
     assert devices[0].selected is True
     assert devices[1].id == "alsa:plughw:CARD=Device,DEV=0"
     assert devices[1].name.startswith("ALSA:")
+
+
+def test_list_audio_sounds_includes_beep_and_uploaded_wavs(tmp_path):
+    sound = tmp_path / "alarm.wav"
+    _write_test_wav(sound)
+
+    sounds = list_audio_sounds(tmp_path, "alarm.wav")
+
+    assert [item.id for item in sounds] == ["beep", "alarm.wav"]
+    assert sounds[0].name == "Generated beep"
+    assert sounds[1].selected is True
+
+
+def test_save_uploaded_sound_stores_valid_wav(tmp_path):
+    source = tmp_path / "source.wav"
+    _write_test_wav(source)
+
+    sound = save_uploaded_sound(tmp_path / "sounds", "My Alert.wav", source.read_bytes())
+
+    assert sound.id.endswith(".wav")
+    assert (tmp_path / "sounds" / sound.id).exists()
+
+
+def test_play_selected_sound_uses_uploaded_wav(tmp_path, monkeypatch):
+    sound = tmp_path / "alarm.wav"
+    _write_test_wav(sound)
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
+
+    result = play_selected_sound("pa:1", tmp_path, "alarm.wav")
+
+    assert result.ok is True
+
+
+def _write_test_wav(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(8000)
+        wav_file.writeframes(b"\x00\x00" * 800)
 
 
 def test_list_audio_output_devices_prefers_pulse_when_available(monkeypatch):

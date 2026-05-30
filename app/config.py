@@ -11,6 +11,7 @@ class AppConfig(BaseSettings):
 
     data_dir: Path = Path("data")
     snapshot_dir: Path = Path("data/snapshots")
+    sound_dir: Path = Path("data/sounds")
     database_path: Path = Path("data/pigeonater.sqlite3")
     model_name: str = "yolo11n.pt"
     action_webhook_url: str | None = None
@@ -27,6 +28,7 @@ class AppConfig(BaseSettings):
     live_preview_jpeg_quality: int = Field(default=65, ge=30, le=95)
     audio_discovery_timeout_seconds: float = 1.0
     audio_playback_timeout_seconds: float = 3.0
+    max_sound_upload_bytes: int = 20 * 1024 * 1024
     hardware_discovery_timeout_seconds: float = 1.0
     hardware_command_timeout_seconds: float = 3.0
     hardware_flash_timeout_seconds: float = 120.0

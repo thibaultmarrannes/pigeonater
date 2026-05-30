@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIGEONATER_BUILD_DATE="${PIGEONATER_BUILD_DATE}"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 curl v4l-utils libportaudio2 alsa-utils pulseaudio-utils \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 curl v4l-utils libportaudio2 alsa-utils pulseaudio-utils ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh -s "$ARDUINO_CLI_VERSION" \

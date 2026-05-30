@@ -1,4 +1,5 @@
 import time
+import wave
 
 from fastapi.testclient import TestClient
 
@@ -373,6 +374,53 @@ def test_audio_test_beep_endpoint_reports_failure(monkeypatch):
     assert detector.last_error == "beep failed"
 
 
+def test_audio_sounds_endpoint_lists_beep():
+    storage.update_settings(DetectorSettings(enabled=False, selected_sound="beep"))
+
+    with TestClient(app) as client:
+        response = client.get("/api/audio/sounds")
+
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == "beep"
+    assert response.json()[0]["selected"] is True
+
+
+def test_audio_upload_sound_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "sound_dir", tmp_path / "sounds")
+    source = tmp_path / "upload.wav"
+    _write_test_wav(source)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/audio/sounds",
+            files={"file": ("upload.wav", source.read_bytes(), "audio/wav")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"].endswith(".wav")
+    assert (tmp_path / "sounds" / body["id"]).exists()
+
+
+def test_audio_test_selected_sound_endpoint(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, output_device="auto", selected_sound="beep"))
+
+    def fake_play(output_device, sound_dir, selected_sound):
+        from app.audio import TestBeepResult
+
+        assert selected_sound == "beep"
+        return TestBeepResult(ok=True)
+
+    monkeypatch.setattr("app.main.play_selected_sound", fake_play)
+    monkeypatch.setattr(detector, "refresh_audio_status", fake_async_refresh)
+
+    with TestClient(app) as client:
+        response = client.post("/api/audio/test-selected-sound")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
 def test_audio_diagnostics_endpoint(monkeypatch):
     storage.update_settings(DetectorSettings(enabled=False, output_device="auto"))
 
@@ -482,3 +530,12 @@ def test_camera_preview_endpoint_reports_failure(monkeypatch):
     assert response.status_code == 503
     assert response.json()["detail"] == "preview failed"
     assert detector.last_error == "preview failed"
+
+
+def _write_test_wav(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(8000)
+        wav_file.writeframes(b"\x00\x00" * 800)

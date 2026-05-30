@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -8,11 +9,12 @@ import re
 import struct
 import subprocess
 import tempfile
+from uuid import uuid4
 import wave
 
 import numpy as np
 
-from app.schemas import AudioDiagnostics, AudioOutputDevice
+from app.schemas import AudioDiagnostics, AudioOutputDevice, AudioSound
 
 sd = None
 
@@ -34,6 +36,10 @@ class AudioTarget:
 class TestBeepResult:
     ok: bool
     error: str | None = None
+
+
+SUPPORTED_SOUND_EXTENSIONS = {".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac"}
+BUILT_IN_BEEP_ID = "beep"
 
 
 def list_audio_output_devices(selected_id: str) -> list[AudioOutputDevice]:
@@ -68,6 +74,80 @@ def list_audio_output_devices(selected_id: str) -> list[AudioOutputDevice]:
         )
 
     return devices
+
+
+def list_audio_sounds(sound_dir: Path, selected_id: str) -> list[AudioSound]:
+    sound_dir.mkdir(parents=True, exist_ok=True)
+    sounds = [
+        AudioSound(
+            id=BUILT_IN_BEEP_ID,
+            name="Generated beep",
+            selected=selected_id == BUILT_IN_BEEP_ID,
+            built_in=True,
+        )
+    ]
+    for path in sorted(sound_dir.glob("*.wav")):
+        sounds.append(
+            AudioSound(
+                id=path.name,
+                name=_sound_display_name(path.name),
+                selected=selected_id == path.name,
+            )
+        )
+    if selected_id != BUILT_IN_BEEP_ID and selected_id not in {sound.id for sound in sounds}:
+        sounds.append(AudioSound(id=selected_id, name=f"{selected_id} (not available)", selected=True))
+    return sounds
+
+
+def save_uploaded_sound(sound_dir: Path, filename: str, payload: bytes) -> AudioSound:
+    extension = Path(filename).suffix.lower()
+    if extension not in SUPPORTED_SOUND_EXTENSIONS:
+        supported = ", ".join(sorted(SUPPORTED_SOUND_EXTENSIONS))
+        raise RuntimeError(f"Unsupported sound file type. Supported: {supported}")
+    if not payload:
+        raise RuntimeError("Uploaded sound file is empty")
+
+    sound_dir.mkdir(parents=True, exist_ok=True)
+    stem = _safe_sound_stem(Path(filename).stem)
+    digest = hashlib.sha1(payload).hexdigest()[:8]
+    target = sound_dir / f"{stem}-{digest}.wav"
+
+    if extension == ".wav":
+        target.write_bytes(payload)
+        _validate_wav_file(target)
+    else:
+        _convert_to_wav(payload, extension, target)
+
+    return AudioSound(id=target.name, name=_sound_display_name(target.name), selected=False)
+
+
+def play_selected_sound(output_device: str, sound_dir: Path, selected_sound: str) -> TestBeepResult:
+    if selected_sound == BUILT_IN_BEEP_ID:
+        return play_test_beep(output_device)
+    sound_path = sound_dir / selected_sound
+    if not sound_path.exists() or not sound_path.is_file():
+        return TestBeepResult(ok=False, error=f"Selected sound is not available: {selected_sound}")
+    return play_sound_file(output_device, sound_path)
+
+
+def play_sound_file(output_device: str, sound_path: Path) -> TestBeepResult:
+    try:
+        target = resolve_audio_target(output_device)
+    except RuntimeError as exc:
+        return TestBeepResult(ok=False, error=f"Sound playback failed: {exc}")
+
+    try:
+        if target.backend == "pulse":
+            _play_pulse_wav(target.play_device, sound_path)
+        elif target.backend == "alsa":
+            _play_alsa_wav(target.play_device, sound_path)
+        elif target.backend == "portaudio":
+            _play_portaudio_wav(target.play_device, sound_path)
+        else:
+            raise RuntimeError(f"Unsupported audio backend {target.backend}")
+        return TestBeepResult(ok=True)
+    except Exception as exc:
+        return TestBeepResult(ok=False, error=f"Sound playback failed: {exc}")
 
 
 def play_test_beep(output_device: str, *, duration_seconds: float = 0.35, sample_rate: int = 44100) -> TestBeepResult:
@@ -266,6 +346,28 @@ def _play_portaudio_beep(device: str | int | None, *, duration_seconds: float, s
             pass
 
 
+def _play_portaudio_wav(device: str | int | None, path: Path) -> None:
+    sounddevice = _sounddevice()
+    with wave.open(str(path), "rb") as wav_file:
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+        sample_rate = wav_file.getframerate()
+        frames = wav_file.readframes(wav_file.getnframes())
+
+    if sample_width != 2:
+        raise RuntimeError("Only 16-bit WAV files are supported")
+    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    if channels > 1:
+        audio = audio.reshape(-1, channels)
+    try:
+        sounddevice.play(audio, samplerate=sample_rate, device=device, blocking=True)
+    finally:
+        try:
+            sounddevice.stop()
+        except Exception:
+            pass
+
+
 def _play_alsa_beep(device: str | int | None, *, duration_seconds: float, sample_rate: int) -> None:
     if not isinstance(device, str) or not device:
         raise RuntimeError("Invalid ALSA output device")
@@ -284,6 +386,21 @@ def _play_alsa_beep(device: str | int | None, *, duration_seconds: float, sample
     finally:
         wav_path.unlink(missing_ok=True)
 
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(detail or f"aplay exited with {result.returncode}")
+
+
+def _play_alsa_wav(device: str | int | None, path: Path) -> None:
+    if not isinstance(device, str) or not device:
+        raise RuntimeError("Invalid ALSA output device")
+    result = subprocess.run(
+        ["aplay", "-q", "-D", device, str(path)],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=_wav_duration_seconds(path) + 3.0,
+    )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise RuntimeError(detail or f"aplay exited with {result.returncode}")
@@ -312,6 +429,21 @@ def _play_pulse_beep(device: str | int | None, *, duration_seconds: float, sampl
         raise RuntimeError(detail or f"paplay exited with {result.returncode}")
 
 
+def _play_pulse_wav(device: str | int | None, path: Path) -> None:
+    if not isinstance(device, str) or not device:
+        raise RuntimeError("Invalid Pulse output device")
+    result = subprocess.run(
+        ["paplay", "--device", device, str(path)],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=_wav_duration_seconds(path) + 3.0,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(detail or f"paplay exited with {result.returncode}")
+
+
 def _write_beep_wav(path: Path, *, duration_seconds: float, sample_rate: int) -> None:
     frame_count = int(sample_rate * duration_seconds)
     amplitude = 0.25
@@ -327,6 +459,73 @@ def _write_beep_wav(path: Path, *, duration_seconds: float, sample_rate: int) ->
             frames.extend(packed)
             frames.extend(packed)
         wav_file.writeframes(bytes(frames))
+
+
+def _convert_to_wav(payload: bytes, extension: str, target: Path) -> None:
+    if not _ffmpeg_available():
+        raise RuntimeError("ffmpeg is required to upload non-WAV sound files")
+    with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tmp:
+        source = Path(tmp.name)
+        tmp.write(payload)
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(source),
+                "-ac",
+                "2",
+                "-ar",
+                "44100",
+                "-sample_fmt",
+                "s16",
+                str(target),
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=30.0,
+        )
+    finally:
+        source.unlink(missing_ok=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        target.unlink(missing_ok=True)
+        raise RuntimeError(detail or "ffmpeg could not convert uploaded sound")
+    _validate_wav_file(target)
+
+
+def _validate_wav_file(path: Path) -> None:
+    try:
+        with wave.open(str(path), "rb") as wav_file:
+            if wav_file.getnchannels() not in {1, 2}:
+                raise RuntimeError("Only mono or stereo WAV files are supported")
+            if wav_file.getsampwidth() != 2:
+                raise RuntimeError("Only 16-bit WAV files are supported")
+            if wav_file.getnframes() <= 0:
+                raise RuntimeError("WAV file has no audio frames")
+    except wave.Error as exc:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(f"Invalid WAV file: {exc}") from exc
+
+
+def _wav_duration_seconds(path: Path) -> float:
+    with wave.open(str(path), "rb") as wav_file:
+        return max(wav_file.getnframes() / float(wav_file.getframerate()), 0.1)
+
+
+def _safe_sound_stem(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip(".-")
+    return (cleaned or f"sound-{uuid4().hex[:8]}")[:80]
+
+
+def _sound_display_name(filename: str) -> str:
+    return Path(filename).stem.replace("-", " ")
+
+
+def _ffmpeg_available() -> bool:
+    return subprocess.run(["which", "ffmpeg"], capture_output=True, check=False).returncode == 0
 
 
 def _portaudio_host_apis(errors: list[str]) -> list[str]:

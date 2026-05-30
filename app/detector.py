@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from app.config import AppConfig
-from app.audio import get_audio_diagnostics, play_test_beep
+from app.audio import get_audio_diagnostics, play_selected_sound
 from app.schemas import DetectionBox, DetectorPerformanceStats
 from app.storage import Storage
 from app.webhook import send_detection_webhook
@@ -83,7 +83,7 @@ class DetectorWorker:
         self._effective_detection_fps: float | None = None
         self._inference_size: str | None = None
         self._detection_throttled = False
-        self._sound_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=1)
+        self._sound_queue: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue(maxsize=1)
         self._video_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
@@ -270,7 +270,7 @@ class DetectorWorker:
 
         settings = self.storage.get_settings()
         if settings.sound_on_detection:
-            self.enqueue_detection_sound(settings.output_device)
+            self.enqueue_detection_sound(settings.output_device, settings.selected_sound)
 
         if self.config.action_webhook_url:
             sent, error = await send_detection_webhook(self.config.action_webhook_url, event)
@@ -387,11 +387,11 @@ class DetectorWorker:
         await asyncio.gather(*self._video_tasks, return_exceptions=True)
         self._video_tasks.clear()
 
-    async def play_detection_sound(self, output_device: str) -> None:
+    async def play_detection_sound(self, output_device: str, selected_sound: str) -> None:
         try:
             result = await self._call_blocking(
                 "Play detection sound",
-                lambda: play_test_beep(output_device),
+                lambda: play_selected_sound(output_device, self.config.sound_dir, selected_sound),
                 self.config.audio_playback_timeout_seconds,
             )
         except Exception as exc:
@@ -427,10 +427,10 @@ class DetectorWorker:
         else:
             self.audio_status = diagnostics.recommended_fix or "No usable audio output"
 
-    def enqueue_detection_sound(self, output_device: str) -> None:
+    def enqueue_detection_sound(self, output_device: str, selected_sound: str) -> None:
         self._ensure_sound_worker()
         try:
-            self._sound_queue.put_nowait(output_device)
+            self._sound_queue.put_nowait((output_device, selected_sound))
         except asyncio.QueueFull:
             self.last_error = "Detection sound skipped because playback is already pending"
 
@@ -441,10 +441,11 @@ class DetectorWorker:
 
     async def _sound_worker(self) -> None:
         while True:
-            output_device = await self._sound_queue.get()
-            if output_device is None:
+            item = await self._sound_queue.get()
+            if item is None:
                 break
-            await self.play_detection_sound(output_device)
+            output_device, selected_sound = item
+            await self.play_detection_sound(output_device, selected_sound)
 
     async def _stop_sound_worker(self) -> None:
         if self._sound_task and not self._sound_task.done():

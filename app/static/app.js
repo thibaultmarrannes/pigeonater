@@ -258,6 +258,7 @@ function settingsPage() {
       return {
         cameras: [],
         audioDevices: [],
+        audioSounds: [],
         hardwareDevices: [],
         audioDiagnostics: null,
         hardwareStatus: null,
@@ -267,6 +268,7 @@ function settingsPage() {
           camera_device: "/dev/video0",
           output_device: "auto",
           sound_on_detection: false,
+          selected_sound: "beep",
           hardware_serial_device: "none",
           hardware_relay_pulse_ms: 500,
           hardware_servo_from_angle: 30,
@@ -284,6 +286,7 @@ function settingsPage() {
         previewError: "",
         audioMessage: "",
         audioError: "",
+        audioUploading: false,
         hardwareMessage: "",
         hardwareError: "",
         hardwareFlashLog: "",
@@ -304,19 +307,24 @@ function settingsPage() {
       audioDeviceLabel(device) {
         return `${device.name}${device.available ? "" : " (not available)"}`;
       },
+      audioSoundLabel(sound) {
+        return sound.name;
+      },
       hardwareDeviceLabel(device) {
         return `${device.name}${device.available ? "" : " (not available)"}`;
       },
       async load() {
-        const [status, cameras, audioDevices, hardwareDevices, hardwareStatus] = await Promise.all([
+        const [status, cameras, audioDevices, audioSounds, hardwareDevices, hardwareStatus] = await Promise.all([
           requestJson("/api/status"),
           requestJson("/api/cameras"),
           requestJson("/api/audio/devices"),
+          requestJson("/api/audio/sounds"),
           requestJson("/api/hardware/devices"),
           requestJson("/api/hardware/status"),
         ]);
         this.cameras = cameras;
         this.audioDevices = audioDevices;
+        this.audioSounds = audioSounds;
         this.hardwareDevices = hardwareDevices;
         this.hardwareStatus = hardwareStatus;
         this.form = { ...status.settings };
@@ -375,6 +383,47 @@ function settingsPage() {
           this.audioMessage = "";
           this.audioError = error.message;
           await this.refreshAudioDiagnostics();
+        }
+      },
+      async playSelectedSound() {
+        this.audioMessage = "Playing selected sound...";
+        this.audioError = "";
+        try {
+          await requestJson("/api/audio/test-selected-sound", { method: "POST" });
+          this.audioMessage = "Selected sound played.";
+          await this.refreshAudioDiagnostics();
+        } catch (error) {
+          this.audioMessage = "";
+          this.audioError = error.message;
+          await this.refreshAudioDiagnostics();
+        }
+      },
+      async uploadSound(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        this.audioUploading = true;
+        this.audioMessage = "Uploading sound...";
+        this.audioError = "";
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          const response = await fetch("/api/audio/sounds", {
+            method: "POST",
+            body: formData,
+          });
+          const body = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error(body?.detail || response.statusText);
+          }
+          this.form.selected_sound = body.id;
+          this.audioSounds = await requestJson("/api/audio/sounds");
+          this.audioMessage = "Sound uploaded. Save settings to use it for detections.";
+        } catch (error) {
+          this.audioMessage = "";
+          this.audioError = error.message;
+        } finally {
+          this.audioUploading = false;
+          event.target.value = "";
         }
       },
       async refreshHardwareStatus() {

@@ -83,14 +83,27 @@
               <span>Play sound on detection</span>
               <input type="checkbox" v-model="form.sound_on_detection">
             </label>
+            <label>
+              <span>Detection sound</span>
+              <select v-model="form.selected_sound">
+                <option v-for="sound in audioSounds" :key="sound.id" :value="sound.id" v-text="audioSoundLabel(sound)"></option>
+              </select>
+            </label>
+            <label>
+              <span>Upload sound</span>
+              <input type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.aac" :disabled="audioUploading" @change="uploadSound">
+            </label>
           </section>
 
           <aside class="panel audio-test">
             <div class="panel-head">
               <h2>Audio test</h2>
-              <button class="secondary" type="button" @click="playTestBeep">Play beep</button>
+              <div class="actions">
+                <button class="secondary" type="button" @click="playTestBeep">Play beep</button>
+                <button type="button" @click="playSelectedSound">Play selected</button>
+              </div>
             </div>
-            <p class="empty">Use this to verify the selected output device before enabling detection sounds later.</p>
+            <p class="empty">Upload a sound, save settings, then use Play selected to verify what detections will play.</p>
             <p v-text="audioMessage"></p>
             <p class="error" v-text="audioError"></p>
           </aside>

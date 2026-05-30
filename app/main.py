@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -12,7 +12,14 @@ from app.cameras import list_camera_devices
 from app.config import get_config, resolve_version
 from app.detector import DetectorWorker
 from app.preview import capture_preview_frame
-from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep
+from app.audio import (
+    list_audio_sounds,
+    get_audio_diagnostics,
+    list_audio_output_devices,
+    play_selected_sound,
+    play_test_beep,
+    save_uploaded_sound,
+)
 from app.hardware import (
     cached_hardware_status,
     flash_arduino_firmware,
@@ -24,6 +31,7 @@ from app.hardware import (
 from app.schemas import (
     AudioDiagnostics,
     AudioOutputDevice,
+    AudioSound,
     CameraDevice,
     DetectionEvent,
     DetectorSettings,
@@ -36,6 +44,7 @@ from app.storage import Storage
 config = get_config()
 version_info = resolve_version(config)
 storage = Storage(config.database_path, config.snapshot_dir)
+config.sound_dir.mkdir(parents=True, exist_ok=True)
 detector = DetectorWorker(config, storage)
 templates = Jinja2Templates(directory="app/templates")
 
@@ -172,6 +181,29 @@ async def api_audio_devices():
     except Exception as exc:
         detector.last_error = f"Audio output discovery failed: {exc}"
         return [AudioOutputDevice(id=settings.output_device, name=settings.output_device, selected=True, available=False)]
+
+
+@app.get("/api/audio/sounds", response_model=list[AudioSound])
+async def api_audio_sounds():
+    settings = storage.get_settings()
+    return list_audio_sounds(config.sound_dir, settings.selected_sound)
+
+
+@app.post("/api/audio/sounds", response_model=AudioSound)
+async def api_audio_upload_sound(file: UploadFile = File(...)):
+    payload = await file.read(config.max_sound_upload_bytes + 1)
+    if len(payload) > config.max_sound_upload_bytes:
+        raise HTTPException(status_code=413, detail="Sound file is too large")
+    try:
+        sound = await asyncio.to_thread(
+            save_uploaded_sound,
+            config.sound_dir,
+            file.filename or "sound",
+            payload,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return sound
 
 
 @app.get("/api/audio/diagnostics", response_model=AudioDiagnostics)
@@ -377,6 +409,26 @@ async def api_audio_test_beep():
     return {"ok": True}
 
 
+@app.post("/api/audio/test-selected-sound")
+async def api_audio_test_selected_sound():
+    settings = storage.get_settings()
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(play_selected_sound, settings.output_device, config.sound_dir, settings.selected_sound),
+            timeout=config.audio_playback_timeout_seconds + 2.0,
+        )
+    except TimeoutError:
+        detector.last_error = "Selected sound test timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+
+    if not result.ok:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error)
+
+    await detector.refresh_audio_status(settings.output_device)
+    return {"ok": True}
+
+
 @app.get("/api/camera/preview")
 async def api_camera_preview():
     settings = storage.get_settings()
@@ -448,6 +500,8 @@ async def api_delete_event_video(event_id: int) -> DetectionEvent:
 @app.patch("/api/settings", response_model=DetectorSettings)
 async def api_update_settings(settings: DetectorSettings):
     previous = storage.get_settings()
+    if settings.selected_sound != "beep" and not (config.sound_dir / settings.selected_sound).exists():
+        raise HTTPException(status_code=422, detail="Selected sound is not available")
     updated = storage.update_settings(settings)
     camera_changed = previous.camera_device != updated.camera_device
     audio_changed = previous.output_device != updated.output_device
