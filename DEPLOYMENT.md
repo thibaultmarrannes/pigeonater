@@ -82,6 +82,20 @@ For audio, leave the output on `Automatic` unless you need to pin a specific dev
 
 Use the Audio diagnostics panel in Settings to confirm that `/dev/snd` is visible and `aplay -l` shows at least one playback device.
 
+If the host itself can play sound in Firefox or YouTube but the app still finds no outputs, the desktop is probably using PulseAudio or PipeWire session audio. In that case, mount the session socket too:
+
+```bash
+export PULSE_SOCKET_PATH="${XDG_RUNTIME_DIR}/pulse/native"
+docker compose -f docker-compose.prod.yml -f docker-compose.pulse.yml pull
+docker compose -f docker-compose.prod.yml -f docker-compose.pulse.yml up -d
+```
+
+Inside the container, session audio should then be visible with:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.pulse.yml exec pigeonater pactl list short sinks
+```
+
 If audio still does not work on the NUC:
 
 ```bash
@@ -96,6 +110,12 @@ If the host sees the speaker but the container does not, restart the service aft
 ```yaml
 devices:
   - /dev/snd:/dev/snd
+```
+
+And if the host sees Pulse or PipeWire sinks but the container does not, confirm you are using:
+
+```text
+docker-compose.pulse.yml
 ```
 
 ## Lighthouse or Auto-Updater Flow

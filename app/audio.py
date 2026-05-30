@@ -77,7 +77,9 @@ def play_test_beep(output_device: str, *, duration_seconds: float = 0.35, sample
         return TestBeepResult(ok=False, error=f"Test beep failed: {exc}")
 
     try:
-        if target.backend == "alsa":
+        if target.backend == "pulse":
+            _play_pulse_beep(target.play_device, duration_seconds=duration_seconds, sample_rate=sample_rate)
+        elif target.backend == "alsa":
             _play_alsa_beep(target.play_device, duration_seconds=duration_seconds, sample_rate=sample_rate)
         elif target.backend == "portaudio":
             _play_portaudio_beep(target.play_device, duration_seconds=duration_seconds, sample_rate=sample_rate)
@@ -138,6 +140,12 @@ def discover_audio_targets(errors: list[str] | None = None) -> list[AudioTarget]
     targets: list[AudioTarget] = []
     seen_ids: set[str] = set()
 
+    for target in _pulse_targets(issues):
+        if target.target_id in seen_ids:
+            continue
+        seen_ids.add(target.target_id)
+        targets.append(target)
+
     for target in _alsa_targets(issues):
         if target.target_id in seen_ids:
             continue
@@ -179,6 +187,22 @@ def _alsa_targets(errors: list[str]) -> list[AudioTarget]:
                 target_id=f"alsa:{spec}",
                 label=label,
                 play_device=spec,
+                available=True,
+            )
+        )
+    return targets
+
+
+def _pulse_targets(errors: list[str]) -> list[AudioTarget]:
+    sinks = _parse_pactl_sinks(errors)
+    targets: list[AudioTarget] = []
+    for sink in sinks:
+        targets.append(
+            AudioTarget(
+                backend="pulse",
+                target_id=f"pulse:{sink['name']}",
+                label=f"Pulse: {sink['description']}",
+                play_device=sink["name"],
                 available=True,
             )
         )
@@ -265,6 +289,29 @@ def _play_alsa_beep(device: str | int | None, *, duration_seconds: float, sample
         raise RuntimeError(detail or f"aplay exited with {result.returncode}")
 
 
+def _play_pulse_beep(device: str | int | None, *, duration_seconds: float, sample_rate: int) -> None:
+    if not isinstance(device, str) or not device:
+        raise RuntimeError("Invalid Pulse output device")
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        wav_path = Path(tmp.name)
+    try:
+        _write_beep_wav(wav_path, duration_seconds=duration_seconds, sample_rate=sample_rate)
+        result = subprocess.run(
+            ["paplay", "--device", device, str(wav_path)],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=max(2.0, duration_seconds + 2.0),
+        )
+    finally:
+        wav_path.unlink(missing_ok=True)
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(detail or f"paplay exited with {result.returncode}")
+
+
 def _write_beep_wav(path: Path, *, duration_seconds: float, sample_rate: int) -> None:
     frame_count = int(sample_rate * duration_seconds)
     amplitude = 0.25
@@ -337,6 +384,41 @@ def _parse_aplay_devices(errors: list[str]) -> list[dict[str, str]]:
     return devices
 
 
+def _parse_pactl_sinks(errors: list[str]) -> list[dict[str, str]]:
+    try:
+        result = subprocess.run(
+            ["pactl", "list", "short", "sinks"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=1.5,
+        )
+    except FileNotFoundError:
+        errors.append("pactl is not installed")
+        return []
+    except (OSError, subprocess.SubprocessError) as exc:
+        errors.append(f"pactl failed: {exc}")
+        return []
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        if detail:
+            errors.append(f"pactl list short sinks returned {result.returncode}: {detail}")
+        return []
+
+    sinks: list[dict[str, str]] = []
+    for raw_line in result.stdout.splitlines():
+        parts = raw_line.split("\t")
+        if len(parts) < 2:
+            continue
+        sink_name = parts[1].strip()
+        description = sink_name
+        if len(parts) >= 5 and parts[4].strip():
+            description = parts[4].strip()
+        sinks.append({"name": sink_name, "description": description})
+    return sinks
+
+
 def _aplay_devices(errors: list[str]) -> list[str]:
     devices = _parse_aplay_devices(errors)
     return _aplay_devices_from_parsed(devices)
@@ -355,6 +437,8 @@ def _recommended_fix(
     pulse_server: str | None,
     pulse_runtime_present: bool,
 ) -> str | None:
+    if output_count == 0 and pulse_server:
+        return "Pulse or PipeWire is configured, but the container cannot query any sinks. Mount the Pulse socket into the container and verify `pactl list short sinks` works inside it."
     if output_count == 0 and not dev_snd_present and not pulse_server and not pulse_runtime_present:
         return "Container cannot see Linux audio devices. Mount /dev/snd into the container and restart it."
     if output_count == 0 and pulse_server and not pulse_runtime_present:

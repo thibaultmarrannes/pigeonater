@@ -54,6 +54,21 @@ def test_list_audio_output_devices_prefers_alsa(monkeypatch):
     assert devices[1].name.startswith("ALSA:")
 
 
+def test_list_audio_output_devices_prefers_pulse_when_available(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr(
+        "app.audio._parse_pactl_sinks",
+        lambda errors: [{"name": "alsa_output.pci-0000_00_1f.3.analog-stereo", "description": "Built-in Audio Analog Stereo"}],
+    )
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
+
+    devices = list_audio_output_devices("auto")
+
+    assert devices[0].name.startswith("Automatic (Pulse:")
+    assert devices[1].id == "pulse:alsa_output.pci-0000_00_1f.3.analog-stereo"
+    assert devices[1].name == "Pulse: Built-in Audio Analog Stereo"
+
+
 def test_list_audio_output_devices_keeps_unavailable_selection(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
     monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
@@ -113,6 +128,22 @@ def test_play_test_beep_prefers_alsa_in_auto_mode(monkeypatch):
     assert calls == ["plughw:CARD=Device,DEV=0"]
 
 
+def test_play_test_beep_uses_pulse_when_available(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr(
+        "app.audio._parse_pactl_sinks",
+        lambda errors: [{"name": "alsa_output.pci-0000_00_1f.3.analog-stereo", "description": "Built-in Audio Analog Stereo"}],
+    )
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
+    calls = []
+    monkeypatch.setattr("app.audio._play_pulse_beep", lambda device, **kwargs: calls.append(device))
+
+    result = play_test_beep("auto")
+
+    assert result.ok is True
+    assert calls == ["alsa_output.pci-0000_00_1f.3.analog-stereo"]
+
+
 def test_play_test_beep_reports_failure(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FailingSoundDevice())
     monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
@@ -125,6 +156,7 @@ def test_play_test_beep_reports_failure(monkeypatch):
 
 def test_get_audio_diagnostics_reports_linux_visibility(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_pactl_sinks", lambda errors: [])
     monkeypatch.setattr(
         "app.audio._parse_aplay_devices",
         lambda errors: [
@@ -156,6 +188,7 @@ def test_get_audio_diagnostics_reports_linux_visibility(monkeypatch):
 
 def test_get_audio_diagnostics_recommends_mounting_dev_snd(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_pactl_sinks", lambda errors: [])
     monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
     monkeypatch.setattr("app.audio._portaudio_targets", lambda errors: [])
     monkeypatch.setattr("app.audio._dev_snd_entries", lambda: [])
@@ -165,3 +198,16 @@ def test_get_audio_diagnostics_recommends_mounting_dev_snd(monkeypatch):
 
     assert diagnostics.dev_snd_present is False
     assert "Mount /dev/snd" in diagnostics.recommended_fix
+
+
+def test_get_audio_diagnostics_reports_pulse_hint(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_pactl_sinks", lambda errors: [])
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
+    monkeypatch.setattr("app.audio._portaudio_targets", lambda errors: [])
+    monkeypatch.setattr("app.audio._dev_snd_entries", lambda: [])
+    monkeypatch.setenv("PULSE_SERVER", "unix:/tmp/pigeonater-pulse-native")
+
+    diagnostics = get_audio_diagnostics("auto")
+
+    assert "Pulse or PipeWire is configured" in diagnostics.recommended_fix

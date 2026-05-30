@@ -1,0 +1,10 @@
+services:
+  pigeonater:
+    environment:
+      PULSE_SERVER: "${PULSE_SERVER:-unix:/tmp/pigeonater-pulse-native}"
+    volumes:
+      - type: bind
+        source: "${PULSE_SOCKET_PATH:-/run/user/1000/pulse/native}"
+        target: /tmp/pigeonater-pulse-native
+        bind:
+          create_host_path: false

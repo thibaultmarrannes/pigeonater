@@ -10,7 +10,7 @@ V1 intentionally treats pretrained `bird` detections as pigeon candidates. The s
 - Logitech-style USB webcam input selectable from the Settings page
 - Audio output selection with a test beep from the Settings page
 - Audio diagnostics for Linux speaker troubleshooting from the Settings page
-- ALSA-first output selection on Linux, with PortAudio fallback for development machines
+- Pulse/PipeWire, ALSA, and PortAudio output selection, with Linux desktop audio support through an optional Compose override
 - Ultralytics YOLO pretrained detector
 - SQLite event/settings database
 - Snapshot evidence with bounding boxes
@@ -52,6 +52,13 @@ device_cgroup_rules:
 volumes:
   - ./data:/data
   - /dev:/dev
+```
+
+On Ubuntu Desktop, if the OS itself can play sound but the container cannot see any outputs, start the app with the Pulse/PipeWire override:
+
+```bash
+export PULSE_SOCKET_PATH="${XDG_RUNTIME_DIR}/pulse/native"
+docker compose -f docker-compose.yml -f docker-compose.pulse.yml up --build
 ```
 
 ## Production Images
@@ -114,7 +121,7 @@ Dashboard settings:
 ## Notes
 
 - The first detector startup downloads the configured YOLO weights if they are not already present in the container.
-- On Ubuntu, audio works best with direct ALSA device access. The container now mounts `/dev/snd`, and the Settings page exposes audio diagnostics so you can confirm what the container can actually see.
+- On Ubuntu Server or appliance-style setups, ALSA is usually enough. On Ubuntu Desktop, browser audio often goes through Pulse or PipeWire instead, and `docker-compose.pulse.yml` mounts that session socket into the container.
 - Detection playback is queued in a background audio worker so detector throughput does not depend on speaker latency.
 - The app is designed for LAN-only access in V1. It does not include authentication or HTTPS.
 - `ACTION_WEBHOOK_URL` is present as an integration point, but no physical deterrent is configured by default.
