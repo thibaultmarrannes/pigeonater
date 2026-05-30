@@ -10,6 +10,7 @@ V1 intentionally treats pretrained `bird` detections as pigeon candidates. The s
 - Logitech-style USB webcam input selectable from the Settings page
 - Audio output selection with a test beep from the Settings page
 - Audio diagnostics for Linux speaker troubleshooting from the Settings page
+- ALSA-first output selection on Linux, with PortAudio fallback for development machines
 - Ultralytics YOLO pretrained detector
 - SQLite event/settings database
 - Snapshot evidence with bounding boxes
@@ -91,7 +92,7 @@ Environment variables:
 Dashboard settings:
 
 - Camera device
-- Audio output device
+- Audio output device, with `Automatic` preferring ALSA on Linux
 - Play sound on detection
 - Detection enabled
 - Confidence threshold
@@ -114,5 +115,6 @@ Dashboard settings:
 
 - The first detector startup downloads the configured YOLO weights if they are not already present in the container.
 - On Ubuntu, audio works best with direct ALSA device access. The container now mounts `/dev/snd`, and the Settings page exposes audio diagnostics so you can confirm what the container can actually see.
+- Detection playback is queued in a background audio worker so detector throughput does not depend on speaker latency.
 - The app is designed for LAN-only access in V1. It does not include authentication or HTTPS.
 - `ACTION_WEBHOOK_URL` is present as an integration point, but no physical deterrent is configured by default.

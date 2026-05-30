@@ -24,6 +24,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await detector.refresh_audio_status(storage.get_settings().output_device)
     if storage.get_settings().enabled:
         await detector.start()
     yield
@@ -58,6 +59,10 @@ async def api_status() -> StatusResponse:
         worker_running=detector.worker_running,
         camera_connected=detector.camera_connected,
         camera_device=settings.camera_device,
+        audio_ready=detector.audio_ready,
+        audio_backend=detector.audio_backend,
+        audio_output_label=detector.audio_output_label,
+        audio_status=detector.audio_status,
         last_frame_at=detector.last_frame_at,
         last_error=detector.last_error,
         last_event_at=storage.latest_event_at(),
@@ -145,6 +150,7 @@ async def api_audio_test_beep():
         detector.last_error = result.error
         raise HTTPException(status_code=503, detail=result.error)
 
+    await detector.refresh_audio_status(settings.output_device)
     return {"ok": True}
 
 
@@ -175,6 +181,9 @@ async def api_update_settings(settings: DetectorSettings):
     previous = storage.get_settings()
     updated = storage.update_settings(settings)
     camera_changed = previous.camera_device != updated.camera_device
+    audio_changed = previous.output_device != updated.output_device
+    if audio_changed or previous.sound_on_detection != updated.sound_on_detection:
+        await detector.refresh_audio_status(updated.output_device)
     if updated.enabled and camera_changed and detector.worker_running:
         await detector.restart()
     elif updated.enabled:

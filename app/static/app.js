@@ -45,6 +45,10 @@ function dashboard() {
         if (!this.status) return "Loading";
         return this.status.camera_connected ? "Connected" : "Disconnected";
       },
+      audioLabel() {
+        if (!this.status) return "Loading";
+        return this.status.audio_ready ? "Ready" : "Not ready";
+      },
     },
     async mounted() {
       await this.refresh();
@@ -132,7 +136,7 @@ function settingsPage() {
         form: {
           enabled: false,
           camera_device: "/dev/video0",
-          output_device: "default",
+          output_device: "auto",
           sound_on_detection: false,
           confidence_threshold: 0.35,
           cooldown_seconds: 60,

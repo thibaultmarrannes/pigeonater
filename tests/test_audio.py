@@ -1,11 +1,10 @@
-from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep
+from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep, resolve_audio_target
 
 
 class FakeSoundDevice:
     def __init__(self):
         self.play_calls = []
         self.stopped = False
-        self.default = type("Default", (), {"device": [0, 1]})()
 
     def query_devices(self, device=None, kind=None):
         devices = [
@@ -26,42 +25,63 @@ class FakeSoundDevice:
         return [{"name": "Core Audio"}]
 
 
-class FakeDefaultPair:
-    def __init__(self, input_device, output_device):
-        self.input = input_device
-        self.output = output_device
-
-
 class FailingSoundDevice(FakeSoundDevice):
     def play(self, data, *, samplerate, device, blocking):
         raise RuntimeError("no output")
 
 
-def test_list_audio_output_devices_filters_output_devices(monkeypatch):
+def test_list_audio_output_devices_prefers_alsa(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr(
+        "app.audio._parse_aplay_devices",
+        lambda errors: [
+            {
+                "card_index": "0",
+                "card_id": "Device",
+                "card_name": "USB Audio Device",
+                "device_index": "0",
+                "device_id": "USB",
+                "device_name": "USB Audio",
+            }
+        ],
+    )
 
-    devices = list_audio_output_devices("1")
+    devices = list_audio_output_devices("auto")
 
-    assert [device.id for device in devices] == ["default", "1"]
-    assert devices[1].name == "Built-in speakers"
-    assert devices[1].selected is True
+    assert devices[0].id == "auto"
+    assert devices[0].selected is True
+    assert devices[1].id == "alsa:plughw:CARD=Device,DEV=0"
+    assert devices[1].name.startswith("ALSA:")
 
 
 def test_list_audio_output_devices_keeps_unavailable_selection(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
 
-    devices = list_audio_output_devices("9")
+    devices = list_audio_output_devices("alsa:plughw:CARD=Missing,DEV=0")
 
-    assert devices[-1].id == "9"
+    assert devices[-1].id == "alsa:plughw:CARD=Missing,DEV=0"
     assert devices[-1].available is False
     assert devices[-1].selected is True
 
 
-def test_play_test_beep_uses_selected_device(monkeypatch):
+def test_resolve_audio_target_supports_legacy_portaudio_id(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
+
+    target = resolve_audio_target("1")
+
+    assert target.backend == "portaudio"
+    assert target.target_id == "pa:1"
+    assert target.play_device == 1
+
+
+def test_play_test_beep_uses_selected_portaudio_device(monkeypatch):
     fake = FakeSoundDevice()
     monkeypatch.setattr("app.audio.sd", fake)
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
 
-    result = play_test_beep("1")
+    result = play_test_beep("pa:1")
 
     assert result.ok is True
     assert fake.play_calls[0]["device"] == 1
@@ -69,42 +89,35 @@ def test_play_test_beep_uses_selected_device(monkeypatch):
     assert fake.stopped is True
 
 
-def test_play_test_beep_resolves_default_output_device(monkeypatch):
-    fake = FakeSoundDevice()
-    monkeypatch.setattr("app.audio.sd", fake)
+def test_play_test_beep_prefers_alsa_in_auto_mode(monkeypatch):
+    monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr(
+        "app.audio._parse_aplay_devices",
+        lambda errors: [
+            {
+                "card_index": "0",
+                "card_id": "Device",
+                "card_name": "USB Audio Device",
+                "device_index": "0",
+                "device_id": "USB",
+                "device_name": "USB Audio",
+            }
+        ],
+    )
+    calls = []
+    monkeypatch.setattr("app.audio._play_alsa_beep", lambda device, **kwargs: calls.append(device))
 
-    result = play_test_beep("default")
-
-    assert result.ok is True
-    assert fake.play_calls[0]["device"] == 1
-
-
-def test_play_test_beep_falls_back_when_default_is_invalid(monkeypatch):
-    fake = FakeSoundDevice()
-    fake.default.device = [-1, -1]
-    monkeypatch.setattr("app.audio.sd", fake)
-
-    result = play_test_beep("default")
-
-    assert result.ok is True
-    assert fake.play_calls[0]["device"] == 1
-
-
-def test_play_test_beep_uses_default_pair_output(monkeypatch):
-    fake = FakeSoundDevice()
-    fake.default.device = FakeDefaultPair(0, 1)
-    monkeypatch.setattr("app.audio.sd", fake)
-
-    result = play_test_beep("default")
+    result = play_test_beep("auto")
 
     assert result.ok is True
-    assert fake.play_calls[0]["device"] == 1
+    assert calls == ["plughw:CARD=Device,DEV=0"]
 
 
 def test_play_test_beep_reports_failure(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FailingSoundDevice())
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
 
-    result = play_test_beep("default")
+    result = play_test_beep("auto")
 
     assert result.ok is False
     assert "no output" in result.error
@@ -112,29 +125,43 @@ def test_play_test_beep_reports_failure(monkeypatch):
 
 def test_get_audio_diagnostics_reports_linux_visibility(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr(
+        "app.audio._parse_aplay_devices",
+        lambda errors: [
+            {
+                "card_index": "0",
+                "card_id": "Device",
+                "card_name": "USB Audio Device",
+                "device_index": "0",
+                "device_id": "USB",
+                "device_name": "USB Audio",
+            }
+        ],
+    )
     monkeypatch.setattr("app.audio._dev_snd_entries", lambda: ["controlC0", "pcmC0D0p"])
     monkeypatch.setattr("app.audio._pulse_runtime_present", lambda: False)
-    monkeypatch.setattr("app.audio._aplay_devices", lambda errors: ["card 0: Device [USB Audio Device], device 0: USB Audio [USB Audio]"])
 
-    diagnostics = get_audio_diagnostics("default")
+    diagnostics = get_audio_diagnostics("auto")
 
-    assert diagnostics.backend == "portaudio"
-    assert diagnostics.default_output_id == "1"
-    assert diagnostics.default_output_name == "Built-in speakers"
-    assert diagnostics.available_output_count == 1
+    assert diagnostics.backend == "auto"
+    assert diagnostics.resolved_backend == "alsa"
+    assert diagnostics.default_output_id == "alsa:plughw:CARD=Device,DEV=0"
+    assert diagnostics.default_output_name == "ALSA: USB Audio Device / USB Audio"
+    assert diagnostics.available_output_count >= 1
     assert diagnostics.dev_snd_present is True
     assert diagnostics.selected_output_available is True
     assert diagnostics.host_apis == ["Core Audio"]
-    assert diagnostics.aplay_devices
+    assert diagnostics.aplay_devices == ["card 0: USB Audio Device / USB Audio"]
 
 
 def test_get_audio_diagnostics_recommends_mounting_dev_snd(monkeypatch):
     monkeypatch.setattr("app.audio.sd", FakeSoundDevice())
+    monkeypatch.setattr("app.audio._parse_aplay_devices", lambda errors: [])
+    monkeypatch.setattr("app.audio._portaudio_targets", lambda errors: [])
     monkeypatch.setattr("app.audio._dev_snd_entries", lambda: [])
     monkeypatch.setattr("app.audio._pulse_runtime_present", lambda: False)
-    monkeypatch.setattr("app.audio._aplay_devices", lambda errors: [])
 
-    diagnostics = get_audio_diagnostics("default")
+    diagnostics = get_audio_diagnostics("auto")
 
     assert diagnostics.dev_snd_present is False
     assert "Mount /dev/snd" in diagnostics.recommended_fix

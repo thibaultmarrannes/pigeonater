@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from app.config import AppConfig
-from app.audio import play_test_beep
+from app.audio import get_audio_diagnostics, play_test_beep
 from app.schemas import DetectionBox
 from app.storage import Storage
 from app.webhook import send_detection_webhook
@@ -62,16 +62,24 @@ class DetectorWorker:
         self.model = model
         self.worker_running = False
         self.camera_connected = False
+        self.audio_ready = False
+        self.audio_backend: str | None = None
+        self.audio_output_label: str | None = None
+        self.audio_status = "Unknown"
         self.last_frame_at: datetime | None = None
         self.last_error: str | None = None
         self._task: asyncio.Task[None] | None = None
+        self._sound_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._last_event_at: datetime | None = None
+        self._sound_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=1)
 
     async def start(self) -> None:
         settings = self.storage.get_settings()
         if not settings.enabled:
             self.storage.update_settings(settings.model_copy(update={"enabled": True}))
+        await self.refresh_audio_status(settings.output_device)
+        self._ensure_sound_worker()
         if self._task and not self._task.done():
             return
         self._stop_event.clear()
@@ -95,6 +103,7 @@ class DetectorWorker:
             except TimeoutError:
                 self.last_error = "Detector did not stop before timeout"
                 self._task.cancel()
+        await self._stop_sound_worker()
 
     async def run(self) -> None:
         self.worker_running = True
@@ -176,7 +185,7 @@ class DetectorWorker:
 
         settings = self.storage.get_settings()
         if settings.sound_on_detection:
-            await self.play_detection_sound(settings.output_device)
+            self.enqueue_detection_sound(settings.output_device)
 
         if self.config.action_webhook_url:
             sent, error = await send_detection_webhook(self.config.action_webhook_url, event)
@@ -199,6 +208,68 @@ class DetectorWorker:
             return
         if not result.ok:
             self.last_error = result.error
+        else:
+            await self.refresh_audio_status(output_device)
+
+    async def refresh_audio_status(self, output_device: str | None = None) -> None:
+        selected_output = output_device or self.storage.get_settings().output_device
+        try:
+            diagnostics = await self._call_blocking(
+                "Discover audio outputs",
+                lambda: get_audio_diagnostics(selected_output),
+                self.config.audio_discovery_timeout_seconds + 1.0,
+            )
+        except Exception as exc:
+            self.audio_ready = False
+            self.audio_backend = None
+            self.audio_output_label = None
+            self.audio_status = str(exc)
+            return
+
+        self.audio_ready = diagnostics.selected_output_available
+        self.audio_backend = diagnostics.resolved_backend
+        self.audio_output_label = diagnostics.default_output_name
+        if diagnostics.selected_output_available:
+            label = diagnostics.default_output_name if selected_output == "auto" else selected_output
+            backend = diagnostics.resolved_backend or "unknown"
+            self.audio_status = f"Ready via {backend}: {label}"
+        else:
+            self.audio_status = diagnostics.recommended_fix or "No usable audio output"
+
+    def enqueue_detection_sound(self, output_device: str) -> None:
+        self._ensure_sound_worker()
+        try:
+            self._sound_queue.put_nowait(output_device)
+        except asyncio.QueueFull:
+            self.last_error = "Detection sound skipped because playback is already pending"
+
+    def _ensure_sound_worker(self) -> None:
+        if self._sound_task and not self._sound_task.done():
+            return
+        self._sound_task = asyncio.create_task(self._sound_worker())
+
+    async def _sound_worker(self) -> None:
+        while True:
+            output_device = await self._sound_queue.get()
+            if output_device is None:
+                break
+            await self.play_detection_sound(output_device)
+
+    async def _stop_sound_worker(self) -> None:
+        if self._sound_task and not self._sound_task.done():
+            try:
+                self._sound_queue.put_nowait(None)
+            except asyncio.QueueFull:
+                try:
+                    _ = self._sound_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                self._sound_queue.put_nowait(None)
+            try:
+                await asyncio.wait_for(asyncio.shield(self._sound_task), timeout=self.config.detector_stop_timeout_seconds)
+            except TimeoutError:
+                self.last_error = "Audio worker did not stop before timeout"
+                self._sound_task.cancel()
 
     def write_snapshot(self, frame: np.ndarray, box: DetectionBox) -> Path:
         annotated = frame.copy()

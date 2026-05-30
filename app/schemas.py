@@ -27,7 +27,7 @@ class DetectionEvent(BaseModel):
 class DetectorSettings(BaseModel):
     enabled: bool = True
     camera_device: str = Field(default="/dev/video0", min_length=1, max_length=255)
-    output_device: str = Field(default="default", min_length=1, max_length=255)
+    output_device: str = Field(default="auto", min_length=1, max_length=255)
     sound_on_detection: bool = False
     confidence_threshold: float = Field(default=0.35, ge=0.05, le=0.95)
     cooldown_seconds: int = Field(default=60, ge=1, le=3600)
@@ -49,6 +49,7 @@ class AudioOutputDevice(BaseModel):
 
 class AudioDiagnostics(BaseModel):
     backend: str
+    resolved_backend: str | None
     default_output_id: str | None
     default_output_name: str | None
     selected_output_id: str
@@ -69,6 +70,10 @@ class StatusResponse(BaseModel):
     worker_running: bool
     camera_connected: bool
     camera_device: str
+    audio_ready: bool
+    audio_backend: str | None
+    audio_output_label: str | None
+    audio_status: str
     last_frame_at: datetime | None
     last_error: str | None
     last_event_at: datetime | None

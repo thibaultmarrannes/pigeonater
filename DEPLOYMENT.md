@@ -78,7 +78,9 @@ docker compose -f docker-compose.prod.yml logs -f
 ```
 
 Open `http://<nuc-ip>:8080`, go to Settings, and select the visible `/dev/video*` camera.
-For audio, open the Settings page and use the Audio diagnostics panel. On Ubuntu, you want `/dev/snd` to be visible there and `aplay -l` to show at least one playback device.
+For audio, leave the output on `Automatic` unless you need to pin a specific device. On Ubuntu, `Automatic` now prefers ALSA outputs first and only falls back to PortAudio when ALSA is unavailable.
+
+Use the Audio diagnostics panel in Settings to confirm that `/dev/snd` is visible and `aplay -l` shows at least one playback device.
 
 If audio still does not work on the NUC:
 

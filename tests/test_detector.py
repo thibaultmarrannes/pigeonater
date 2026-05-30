@@ -73,7 +73,7 @@ async def test_process_frame_creates_event(tmp_path):
 async def test_process_frame_plays_sound_when_enabled(tmp_path, monkeypatch):
     storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
     storage.update_settings(
-        storage.get_settings().model_copy(update={"sound_on_detection": True, "output_device": "1"})
+        storage.get_settings().model_copy(update={"sound_on_detection": True, "output_device": "pa:1"})
     )
     config = AppConfig(
         data_dir=tmp_path,
@@ -87,15 +87,15 @@ async def test_process_frame_plays_sound_when_enabled(tmp_path, monkeypatch):
     )
     calls = []
 
-    async def fake_play_detection_sound(output_device):
+    def fake_enqueue_detection_sound(output_device):
         calls.append(output_device)
 
-    monkeypatch.setattr(worker, "play_detection_sound", fake_play_detection_sound)
+    monkeypatch.setattr(worker, "enqueue_detection_sound", fake_enqueue_detection_sound)
 
     created = await worker.process_frame(np.zeros((40, 40, 3), dtype=np.uint8), 0.35, 60)
 
     assert created is True
-    assert calls == ["1"]
+    assert calls == ["pa:1"]
 
 
 @pytest.mark.asyncio
@@ -114,15 +114,36 @@ async def test_process_frame_does_not_play_sound_when_disabled(tmp_path, monkeyp
     )
     calls = []
 
-    async def fake_play_detection_sound(output_device):
+    def fake_enqueue_detection_sound(output_device):
         calls.append(output_device)
 
-    monkeypatch.setattr(worker, "play_detection_sound", fake_play_detection_sound)
+    monkeypatch.setattr(worker, "enqueue_detection_sound", fake_enqueue_detection_sound)
 
     created = await worker.process_frame(np.zeros((40, 40, 3), dtype=np.uint8), 0.35, 60)
 
     assert created is True
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_enqueue_detection_sound_drops_when_queue_is_full(tmp_path):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+    )
+    worker = DetectorWorker(config, storage, model=FakeModel([]))
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(worker, "_ensure_sound_worker", lambda: None)
+
+    try:
+        worker.enqueue_detection_sound("auto")
+        worker.enqueue_detection_sound("auto")
+
+        assert worker.last_error == "Detection sound skipped because playback is already pending"
+    finally:
+        monkeypatch.undo()
 
 
 @pytest.mark.asyncio

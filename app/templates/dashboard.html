@@ -29,6 +29,10 @@
       <span>Last event</span>
       <strong v-text="formatDate(status?.last_event_at)"></strong>
     </article>
+    <article>
+      <span>Audio</span>
+      <strong v-text="audioLabel"></strong>
+    </article>
   </section>
 
   <section class="split">
@@ -53,6 +57,7 @@
       <h2>Configuration</h2>
       <dl v-if="status">
         <dt>Camera</dt><dd v-text="status.camera_device"></dd>
+        <dt>Audio</dt><dd v-text="status.audio_status"></dd>
         <dt>Model</dt><dd v-text="status.model_name"></dd>
         <dt>Threshold</dt><dd v-text="status.settings.confidence_threshold"></dd>
         <dt>Cooldown</dt><dd v-text="`${status.settings.cooldown_seconds}s`"></dd>
