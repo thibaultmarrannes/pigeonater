@@ -258,9 +258,9 @@ def test_camera_preview_endpoint_uses_cached_detector_frame(monkeypatch):
 
 def test_live_stream_endpoint_uses_cached_detector_frame(monkeypatch):
     async def fake_cached_preview():
-        return b"\xff\xd8live"
+        return 12, b"\xff\xd8live"
 
-    monkeypatch.setattr(detector, "latest_preview_jpeg", fake_cached_preview)
+    monkeypatch.setattr(detector, "latest_preview", fake_cached_preview)
 
     with TestClient(app) as client:
         response = client.get("/api/live.mjpg?once=true")
@@ -268,6 +268,7 @@ def test_live_stream_endpoint_uses_cached_detector_frame(monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("multipart/x-mixed-replace")
     assert b"Content-Type: image/jpeg" in response.content
+    assert b"Content-Length: 6" in response.content
     assert b"\xff\xd8live" in response.content
 
 

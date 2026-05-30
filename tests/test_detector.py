@@ -1,5 +1,6 @@
 import asyncio
 
+import cv2
 import numpy as np
 import pytest
 
@@ -85,6 +86,29 @@ async def test_update_preview_frame_caches_jpeg(tmp_path):
     image = await worker.latest_preview_jpeg()
     assert image is not None
     assert image.startswith(b"\xff\xd8")
+
+
+@pytest.mark.asyncio
+async def test_update_preview_frame_downscales_and_tracks_sequence(tmp_path):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+        live_preview_max_width=320,
+        live_preview_jpeg_quality=60,
+    )
+    worker = DetectorWorker(config, storage, model=FakeModel([]))
+
+    await worker.update_preview_frame(np.zeros((480, 640, 3), dtype=np.uint8))
+
+    sequence, image = await worker.latest_preview()
+    assert sequence == 1
+    assert image is not None
+    decoded = cv2.imdecode(np.frombuffer(image, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert decoded is not None
+    assert decoded.shape[1] == 320
+    assert decoded.shape[0] == 240
 
 
 @pytest.mark.asyncio

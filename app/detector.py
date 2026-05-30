@@ -71,6 +71,7 @@ class DetectorWorker:
         self._latest_preview_jpeg: bytes | None = None
         self._latest_frame: np.ndarray | None = None
         self._latest_preview_at: datetime | None = None
+        self._latest_preview_sequence = 0
         self._preview_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
         self._sound_task: asyncio.Task[None] | None = None
@@ -166,20 +167,38 @@ class DetectorWorker:
             self._latest_preview_jpeg = encoded
             self._latest_frame = frame.copy()
             self._latest_preview_at = datetime.now(UTC)
+            self._latest_preview_sequence += 1
 
     async def latest_preview_jpeg(self) -> bytes | None:
         async with self._preview_lock:
             return self._latest_preview_jpeg
+
+    async def latest_preview(self) -> tuple[int, bytes | None]:
+        async with self._preview_lock:
+            return self._latest_preview_sequence, self._latest_preview_jpeg
 
     async def latest_frame_copy(self) -> np.ndarray | None:
         async with self._preview_lock:
             return None if self._latest_frame is None else self._latest_frame.copy()
 
     def encode_preview_frame(self, frame: np.ndarray) -> bytes:
-        encoded, image = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        preview = self._resize_preview_frame(frame)
+        encoded, image = cv2.imencode(
+            ".jpg",
+            preview,
+            [int(cv2.IMWRITE_JPEG_QUALITY), int(self.config.live_preview_jpeg_quality)],
+        )
         if not encoded:
             raise RuntimeError("Camera preview JPEG encode failed")
         return image.tobytes()
+
+    def _resize_preview_frame(self, frame: np.ndarray) -> np.ndarray:
+        max_width = int(self.config.live_preview_max_width)
+        height, width = frame.shape[:2]
+        if width <= max_width:
+            return frame
+        scale = max_width / float(width)
+        return cv2.resize(frame, (max_width, max(int(height * scale), 1)), interpolation=cv2.INTER_AREA)
 
     async def process_frame(
         self,

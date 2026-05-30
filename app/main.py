@@ -218,13 +218,16 @@ async def api_camera_preview():
 async def api_live_stream(request: Request, once: bool = False):
     async def frame_stream():
         interval = 1.0 / max(float(config.live_stream_fps), 1.0)
+        last_sequence = -1
         while True:
-            image = await detector.latest_preview_jpeg()
-            if image is not None:
+            sequence, image = await detector.latest_preview()
+            if image is not None and sequence != last_sequence:
+                last_sequence = sequence
                 yield (
                     b"--frame\r\n"
                     b"Content-Type: image/jpeg\r\n"
-                    b"Cache-Control: no-store\r\n\r\n"
+                    b"Cache-Control: no-store\r\n"
+                    + f"Content-Length: {len(image)}\r\n\r\n".encode("ascii")
                     + image
                     + b"\r\n"
                 )

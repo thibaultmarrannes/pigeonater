@@ -23,6 +23,8 @@ class AppConfig(BaseSettings):
     event_video_seconds: float = 10.0
     event_video_fps: float = 24.0
     live_stream_fps: float = 5.0
+    live_preview_max_width: int = Field(default=960, ge=320, le=3840)
+    live_preview_jpeg_quality: int = Field(default=65, ge=30, le=95)
     audio_discovery_timeout_seconds: float = 1.0
     audio_playback_timeout_seconds: float = 3.0
     pigeonater_version: str = "dev"
