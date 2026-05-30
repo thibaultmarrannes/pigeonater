@@ -27,6 +27,11 @@ class AppConfig(BaseSettings):
     live_preview_jpeg_quality: int = Field(default=65, ge=30, le=95)
     audio_discovery_timeout_seconds: float = 1.0
     audio_playback_timeout_seconds: float = 3.0
+    hardware_discovery_timeout_seconds: float = 1.0
+    hardware_command_timeout_seconds: float = 3.0
+    hardware_flash_timeout_seconds: float = 120.0
+    arduino_fqbn: str = "arduino:avr:uno"
+    arduino_firmware_path: Path = Path("firmware/pigeonater_arduino")
     pigeonater_version: str = "dev"
     pigeonater_commit: str = "unknown"
     pigeonater_build_date: str = "unknown"

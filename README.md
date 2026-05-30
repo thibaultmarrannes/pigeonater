@@ -9,6 +9,7 @@ V1 intentionally treats pretrained `bird` detections as pigeon candidates. The s
 - FastAPI dashboard on port `8080`
 - Logitech-style USB webcam input selectable from the Settings page
 - Audio output selection with a test beep from the Settings page
+- Arduino USB serial selection with manual relay and servo tests from the Settings page
 - Audio diagnostics for Linux speaker troubleshooting from the Settings page
 - Pulse/PipeWire, ALSA, and PortAudio output selection, with Linux desktop audio support through an optional Compose override
 - Ultralytics YOLO pretrained detector
@@ -50,6 +51,8 @@ devices:
 device_cgroup_rules:
   - "c 81:* rmw"
   - "c 116:* rmw"
+  - "c 166:* rmw"
+  - "c 188:* rmw"
 volumes:
   - ./data:/data
   - /dev:/dev
@@ -83,7 +86,15 @@ v4l2-ctl --list-devices
 
 The Settings page lists visible `/dev/video*` devices. Pick the camera there, then save settings. If no camera appears, confirm the host sees it with `v4l2-ctl --list-devices` and restart the container after plugging it in.
 
-5. For production use, follow [DEPLOYMENT.md](DEPLOYMENT.md). For local source builds, start the app with:
+5. Optional Arduino deterrent hardware:
+
+```bash
+ls -l /dev/serial/by-id
+```
+
+Flash `firmware/pigeonater_arduino/pigeonater_arduino.ino` to the Arduino, connect the relay to `D7`, and connect the servo signal to `D9`. The Settings page lists the visible serial devices and provides manual LED blink, relay, servo, and firmware flash buttons. Detection does not trigger Arduino hardware yet.
+
+6. For production use, follow [DEPLOYMENT.md](DEPLOYMENT.md). For local source builds, start the app with:
 
 ```bash
 scripts/setup-nuc.sh --mode dev --apply
@@ -102,6 +113,7 @@ Dashboard settings:
 - Camera device
 - Audio output device, with `Automatic` preferring ALSA on Linux
 - Play sound on detection
+- Arduino serial device and manual relay/servo test parameters
 - Detection enabled
 - Confidence threshold
 - Cooldown seconds between saved events
@@ -114,6 +126,11 @@ Dashboard settings:
 - `GET /api/events/{id}`
 - `GET /api/audio/devices`
 - `GET /api/audio/diagnostics`
+- `GET /api/hardware/devices`
+- `GET /api/hardware/status`
+- `POST /api/hardware/test-relay`
+- `POST /api/hardware/test-servo`
+- `POST /api/hardware/flash`
 - `POST /api/audio/test-beep`
 - `PATCH /api/settings`
 - `POST /api/detector/start`
@@ -124,5 +141,6 @@ Dashboard settings:
 - The first detector startup downloads the configured YOLO weights if they are not already present in the container.
 - On Ubuntu Server or appliance-style setups, ALSA is usually enough. On Ubuntu Desktop, browser audio often goes through Pulse or PipeWire instead, and `docker-compose.pulse.yml` mounts that session socket into the container.
 - Detection playback is queued in a background audio worker so detector throughput does not depend on speaker latency.
+- Arduino hardware actions are manual tests only in this version; detection does not trigger the relay or servo.
 - The app is designed for LAN-only access in V1. It does not include authentication or HTTPS.
 - `ACTION_WEBHOOK_URL` is present as an integration point, but no physical deterrent is configured by default.

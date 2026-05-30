@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 
+ARG ARDUINO_CLI_VERSION="1.5.0"
 ARG PIGEONATER_VERSION="dev"
 ARG PIGEONATER_COMMIT="unknown"
 ARG PIGEONATER_BUILD_DATE="unknown"
@@ -15,11 +16,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 curl v4l-utils libportaudio2 alsa-utils pulseaudio-utils \
     && rm -rf /var/lib/apt/lists/*
 
+RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh -s "$ARDUINO_CLI_VERSION" \
+    && arduino-cli core update-index \
+    && arduino-cli core install arduino:avr \
+    && arduino-cli lib install Servo
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app ./app
+COPY firmware ./firmware
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

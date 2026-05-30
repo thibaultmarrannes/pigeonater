@@ -30,6 +30,28 @@
       <input type="checkbox" v-model="form.sound_on_detection">
     </label>
     <label>
+      <span>Arduino serial device</span>
+      <select v-model="form.hardware_serial_device">
+        <option v-for="device in hardwareDevices" :key="device.path" :value="device.path" v-text="hardwareDeviceLabel(device)"></option>
+      </select>
+    </label>
+    <label>
+      <span>Relay pulse milliseconds</span>
+      <input type="number" v-model.number="form.hardware_relay_pulse_ms" min="50" max="10000" step="50">
+    </label>
+    <label>
+      <span>Servo from angle</span>
+      <input type="number" v-model.number="form.hardware_servo_from_angle" min="0" max="180" step="1">
+    </label>
+    <label>
+      <span>Servo to angle</span>
+      <input type="number" v-model.number="form.hardware_servo_to_angle" min="0" max="180" step="1">
+    </label>
+    <label>
+      <span>Servo step delay milliseconds</span>
+      <input type="number" v-model.number="form.hardware_servo_step_delay_ms" min="1" max="1000" step="1">
+    </label>
+    <label>
       <span>Confidence threshold</span>
       <input type="number" v-model.number="form.confidence_threshold" min="0.05" max="0.95" step="0.05">
     </label>
@@ -65,6 +87,30 @@
     <p class="empty">Use this to verify the selected output device before enabling detection sounds later.</p>
     <p v-text="audioMessage"></p>
     <p class="error" v-text="audioError"></p>
+  </aside>
+
+  <aside class="panel hardware-test">
+    <div class="panel-head">
+      <h2>Arduino hardware</h2>
+      <button class="secondary" type="button" @click="refreshHardwareStatus">Refresh</button>
+    </div>
+    <dl v-if="hardwareStatus">
+      <dt>Selected device</dt><dd v-text="hardwareStatus.selected_device"></dd>
+      <dt>Visible</dt><dd v-text="hardwareStatus.available ? 'Yes' : 'No'"></dd>
+      <dt>Connected</dt><dd v-text="hardwareStatus.connected ? 'Yes' : 'Not tested'"></dd>
+      <dt>Last response</dt><dd v-text="hardwareStatus.last_response || 'None'"></dd>
+      <dt>Last error</dt><dd v-text="hardwareStatus.last_error || 'None'"></dd>
+    </dl>
+    <p v-else class="empty">Hardware status unavailable.</p>
+    <div class="actions hardware-actions">
+      <button class="secondary" type="button" @click="testLed">Blink LED</button>
+      <button type="button" @click="testRelay">Test relay pulse</button>
+      <button class="secondary" type="button" @click="testServo">Test servo sweep</button>
+      <button class="secondary" type="button" @click="flashArduino">Flash firmware</button>
+    </div>
+    <p class="empty">Detection does not trigger Arduino hardware in this version.</p>
+    <p v-text="hardwareMessage"></p>
+    <p class="error" v-text="hardwareError"></p>
   </aside>
 
   <aside class="panel audio-diagnostics">

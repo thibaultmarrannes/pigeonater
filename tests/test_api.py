@@ -103,6 +103,30 @@ def test_settings_endpoint_validates_payload():
     assert detector.worker_running is False
 
 
+def test_settings_endpoint_validates_hardware_payload():
+    storage.update_settings(DetectorSettings(enabled=False))
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/settings",
+            json={
+                "enabled": False,
+                "camera_device": "/dev/video0",
+                "output_device": "auto",
+                "sound_on_detection": False,
+                "hardware_serial_device": "/tmp/ttyACM0",
+                "hardware_relay_pulse_ms": 20,
+                "hardware_servo_from_angle": 30,
+                "hardware_servo_to_angle": 150,
+                "hardware_servo_step_delay_ms": 10,
+                "confidence_threshold": 0.35,
+                "cooldown_seconds": 60,
+                "retention_days": 7,
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_cameras_endpoint_times_out_quickly(monkeypatch):
     storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
     monkeypatch.setattr(config, "camera_discovery_timeout_seconds", 0.05)
@@ -141,6 +165,130 @@ def test_audio_devices_endpoint_times_out_quickly(monkeypatch):
     assert response.status_code == 200
     assert elapsed < 0.5
     assert response.json() == [{"id": "auto", "name": "auto", "selected": True, "available": False}]
+
+
+def test_hardware_devices_endpoint(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, hardware_serial_device="/dev/ttyACM0"))
+
+    def fake_hardware_devices(selected_device):
+        return [
+            {
+                "path": "none",
+                "name": "Disabled",
+                "selected": False,
+                "available": True,
+            },
+            {
+                "path": selected_device,
+                "name": selected_device,
+                "selected": True,
+                "available": True,
+            },
+        ]
+
+    monkeypatch.setattr("app.main.list_hardware_devices", fake_hardware_devices)
+
+    with TestClient(app) as client:
+        response = client.get("/api/hardware/devices")
+
+    assert response.status_code == 200
+    assert response.json()[1]["path"] == "/dev/ttyACM0"
+    assert response.json()[1]["selected"] is True
+
+
+def test_hardware_status_endpoint_does_not_open_serial():
+    storage.update_settings(DetectorSettings(enabled=False, hardware_serial_device="/dev/ttyACM0"))
+
+    with TestClient(app) as client:
+        response = client.get("/api/hardware/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selected_device"] == "/dev/ttyACM0"
+    assert body["connected"] is False
+
+
+def test_hardware_test_relay_endpoint(monkeypatch):
+    storage.update_settings(
+        DetectorSettings(
+            enabled=False,
+            hardware_serial_device="/dev/ttyACM0",
+            hardware_relay_pulse_ms=750,
+        )
+    )
+
+    def fake_relay(device, pulse_ms, *, timeout_seconds):
+        from app.schemas import HardwareCommandResult
+
+        assert device == "/dev/ttyACM0"
+        assert pulse_ms == 750
+        return HardwareCommandResult(ok=True, response="OK RELAY_PULSE")
+
+    monkeypatch.setattr("app.main.send_relay_pulse", fake_relay)
+
+    with TestClient(app) as client:
+        response = client.post("/api/hardware/test-relay")
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is True
+    assert response.json()["last_response"] == "OK RELAY_PULSE"
+
+
+def test_hardware_test_led_endpoint(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, hardware_serial_device="/dev/ttyACM0"))
+
+    def fake_led(device, *, timeout_seconds):
+        from app.schemas import HardwareCommandResult
+
+        assert device == "/dev/ttyACM0"
+        return HardwareCommandResult(ok=True, response="OK LED_BLINK")
+
+    monkeypatch.setattr("app.main.send_led_blink", fake_led)
+
+    with TestClient(app) as client:
+        response = client.post("/api/hardware/test-led")
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is True
+    assert response.json()["last_response"] == "OK LED_BLINK"
+
+
+def test_hardware_test_servo_endpoint_reports_failure(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, hardware_serial_device="/dev/ttyACM0"))
+
+    def fake_servo(device, from_angle, to_angle, step_delay_ms, *, timeout_seconds):
+        from app.schemas import HardwareCommandResult
+
+        return HardwareCommandResult(ok=False, error="servo failed")
+
+    monkeypatch.setattr("app.main.send_servo_sweep", fake_servo)
+
+    with TestClient(app) as client:
+        response = client.post("/api/hardware/test-servo")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "servo failed"
+
+
+def test_hardware_flash_endpoint(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, hardware_serial_device="/dev/ttyACM0"))
+
+    def fake_flash(device, *, firmware_path, fqbn, timeout_seconds):
+        from app.schemas import HardwareCommandResult
+
+        assert device == "/dev/ttyACM0"
+        assert str(firmware_path).endswith("firmware/pigeonater_arduino")
+        assert fqbn == "arduino:avr:uno"
+        return HardwareCommandResult(ok=True, response="OK FIRMWARE_FLASHED")
+
+    monkeypatch.setattr("app.main.flash_arduino_firmware", fake_flash)
+
+    with TestClient(app) as client:
+        response = client.post("/api/hardware/flash")
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is True
+    assert response.json()["last_response"] == "OK FIRMWARE_FLASHED"
 
 
 def test_audio_test_beep_endpoint(monkeypatch):

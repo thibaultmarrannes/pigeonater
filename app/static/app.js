@@ -258,12 +258,19 @@ function settingsPage() {
       return {
         cameras: [],
         audioDevices: [],
+        hardwareDevices: [],
         audioDiagnostics: null,
+        hardwareStatus: null,
         form: {
           enabled: false,
           camera_device: "/dev/video0",
           output_device: "auto",
           sound_on_detection: false,
+          hardware_serial_device: "none",
+          hardware_relay_pulse_ms: 500,
+          hardware_servo_from_angle: 30,
+          hardware_servo_to_angle: 150,
+          hardware_servo_step_delay_ms: 10,
           confidence_threshold: 0.35,
           cooldown_seconds: 60,
           retention_days: 7,
@@ -274,6 +281,8 @@ function settingsPage() {
         previewError: "",
         audioMessage: "",
         audioError: "",
+        hardwareMessage: "",
+        hardwareError: "",
         diagnosticsError: "",
       };
     },
@@ -291,14 +300,21 @@ function settingsPage() {
       audioDeviceLabel(device) {
         return `${device.name}${device.available ? "" : " (not available)"}`;
       },
+      hardwareDeviceLabel(device) {
+        return `${device.name}${device.available ? "" : " (not available)"}`;
+      },
       async load() {
-        const [status, cameras, audioDevices] = await Promise.all([
+        const [status, cameras, audioDevices, hardwareDevices, hardwareStatus] = await Promise.all([
           requestJson("/api/status"),
           requestJson("/api/cameras"),
           requestJson("/api/audio/devices"),
+          requestJson("/api/hardware/devices"),
+          requestJson("/api/hardware/status"),
         ]);
         this.cameras = cameras;
         this.audioDevices = audioDevices;
+        this.hardwareDevices = hardwareDevices;
+        this.hardwareStatus = hardwareStatus;
         this.form = { ...status.settings };
         await this.refreshAudioDiagnostics();
       },
@@ -312,6 +328,8 @@ function settingsPage() {
           this.message = "Settings saved.";
           this.audioMessage = "";
           this.audioError = "";
+          this.hardwareMessage = "";
+          this.hardwareError = "";
           await this.load();
           await this.refreshPreview();
         } catch (error) {
@@ -352,6 +370,63 @@ function settingsPage() {
           this.audioMessage = "";
           this.audioError = error.message;
           await this.refreshAudioDiagnostics();
+        }
+      },
+      async refreshHardwareStatus() {
+        this.hardwareError = "";
+        try {
+          this.hardwareStatus = await requestJson("/api/hardware/status");
+        } catch (error) {
+          this.hardwareStatus = null;
+          this.hardwareError = error.message;
+        }
+      },
+      async testRelay() {
+        this.hardwareMessage = "Testing relay...";
+        this.hardwareError = "";
+        try {
+          this.hardwareStatus = await requestJson("/api/hardware/test-relay", { method: "POST" });
+          this.hardwareMessage = "Relay test sent.";
+        } catch (error) {
+          this.hardwareMessage = "";
+          this.hardwareError = error.message;
+          await this.refreshHardwareStatus();
+        }
+      },
+      async testLed() {
+        this.hardwareMessage = "Blinking LED...";
+        this.hardwareError = "";
+        try {
+          this.hardwareStatus = await requestJson("/api/hardware/test-led", { method: "POST" });
+          this.hardwareMessage = "LED blink test sent.";
+        } catch (error) {
+          this.hardwareMessage = "";
+          this.hardwareError = error.message;
+          await this.refreshHardwareStatus();
+        }
+      },
+      async testServo() {
+        this.hardwareMessage = "Testing servo...";
+        this.hardwareError = "";
+        try {
+          this.hardwareStatus = await requestJson("/api/hardware/test-servo", { method: "POST" });
+          this.hardwareMessage = "Servo test sent.";
+        } catch (error) {
+          this.hardwareMessage = "";
+          this.hardwareError = error.message;
+          await this.refreshHardwareStatus();
+        }
+      },
+      async flashArduino() {
+        this.hardwareMessage = "Flashing Arduino firmware...";
+        this.hardwareError = "";
+        try {
+          this.hardwareStatus = await requestJson("/api/hardware/flash", { method: "POST" });
+          this.hardwareMessage = "Arduino firmware flashed.";
+        } catch (error) {
+          this.hardwareMessage = "";
+          this.hardwareError = error.message;
+          await this.refreshHardwareStatus();
         }
       },
       async refreshAudioDiagnostics() {

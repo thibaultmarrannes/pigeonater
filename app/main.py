@@ -13,7 +13,24 @@ from app.config import get_config, resolve_version
 from app.detector import DetectorWorker
 from app.preview import capture_preview_frame
 from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep
-from app.schemas import AudioDiagnostics, AudioOutputDevice, CameraDevice, DetectionEvent, DetectorSettings, StatusResponse
+from app.hardware import (
+    cached_hardware_status,
+    flash_arduino_firmware,
+    list_hardware_devices,
+    send_led_blink,
+    send_relay_pulse,
+    send_servo_sweep,
+)
+from app.schemas import (
+    AudioDiagnostics,
+    AudioOutputDevice,
+    CameraDevice,
+    DetectionEvent,
+    DetectorSettings,
+    HardwareDevice,
+    HardwareStatus,
+    StatusResponse,
+)
 from app.storage import Storage
 
 config = get_config()
@@ -170,6 +187,166 @@ async def api_audio_diagnostics():
     except Exception as exc:
         detector.last_error = f"Audio diagnostics failed: {exc}"
         raise HTTPException(status_code=503, detail=detector.last_error)
+
+
+@app.get("/api/hardware/devices", response_model=list[HardwareDevice])
+async def api_hardware_devices():
+    settings = storage.get_settings()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(list_hardware_devices, settings.hardware_serial_device),
+            timeout=config.hardware_discovery_timeout_seconds,
+        )
+    except TimeoutError:
+        detector.last_error = "Hardware device discovery timed out"
+        return [
+            HardwareDevice(
+                path=settings.hardware_serial_device,
+                name=settings.hardware_serial_device,
+                selected=True,
+                available=False,
+            )
+        ]
+    except Exception as exc:
+        detector.last_error = f"Hardware device discovery failed: {exc}"
+        return [
+            HardwareDevice(
+                path=settings.hardware_serial_device,
+                name=settings.hardware_serial_device,
+                selected=True,
+                available=False,
+            )
+        ]
+
+
+@app.get("/api/hardware/status", response_model=HardwareStatus)
+async def api_hardware_status():
+    settings = storage.get_settings()
+    return cached_hardware_status(settings.hardware_serial_device)
+
+
+@app.post("/api/hardware/test-relay", response_model=HardwareStatus)
+async def api_hardware_test_relay():
+    settings = storage.get_settings()
+    timeout_seconds = config.hardware_command_timeout_seconds + (settings.hardware_relay_pulse_ms / 1000.0)
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                send_relay_pulse,
+                settings.hardware_serial_device,
+                settings.hardware_relay_pulse_ms,
+                timeout_seconds=timeout_seconds,
+            ),
+            timeout=timeout_seconds + 0.5,
+        )
+    except TimeoutError:
+        detector.last_error = "Relay test timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+
+    if not result.ok:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error or "Relay test failed")
+
+    return HardwareStatus(
+        selected_device=settings.hardware_serial_device,
+        available=True,
+        connected=True,
+        last_response=result.response,
+    )
+
+
+@app.post("/api/hardware/test-led", response_model=HardwareStatus)
+async def api_hardware_test_led():
+    settings = storage.get_settings()
+    timeout_seconds = config.hardware_command_timeout_seconds + 1.0
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                send_led_blink,
+                settings.hardware_serial_device,
+                timeout_seconds=timeout_seconds,
+            ),
+            timeout=timeout_seconds + 0.5,
+        )
+    except TimeoutError:
+        detector.last_error = "LED blink test timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+
+    if not result.ok:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error or "LED blink test failed")
+
+    return HardwareStatus(
+        selected_device=settings.hardware_serial_device,
+        available=True,
+        connected=True,
+        last_response=result.response,
+    )
+
+
+@app.post("/api/hardware/test-servo", response_model=HardwareStatus)
+async def api_hardware_test_servo():
+    settings = storage.get_settings()
+    sweep_seconds = abs(settings.hardware_servo_to_angle - settings.hardware_servo_from_angle) * (
+        settings.hardware_servo_step_delay_ms / 1000.0
+    )
+    timeout_seconds = config.hardware_command_timeout_seconds + sweep_seconds
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                send_servo_sweep,
+                settings.hardware_serial_device,
+                settings.hardware_servo_from_angle,
+                settings.hardware_servo_to_angle,
+                settings.hardware_servo_step_delay_ms,
+                timeout_seconds=timeout_seconds,
+            ),
+            timeout=timeout_seconds + 0.5,
+        )
+    except TimeoutError:
+        detector.last_error = "Servo test timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+
+    if not result.ok:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error or "Servo test failed")
+
+    return HardwareStatus(
+        selected_device=settings.hardware_serial_device,
+        available=True,
+        connected=True,
+        last_response=result.response,
+    )
+
+
+@app.post("/api/hardware/flash", response_model=HardwareStatus)
+async def api_hardware_flash():
+    settings = storage.get_settings()
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                flash_arduino_firmware,
+                settings.hardware_serial_device,
+                firmware_path=config.arduino_firmware_path,
+                fqbn=config.arduino_fqbn,
+                timeout_seconds=config.hardware_flash_timeout_seconds,
+            ),
+            timeout=config.hardware_flash_timeout_seconds + 1.0,
+        )
+    except TimeoutError:
+        detector.last_error = "Arduino firmware flash timed out"
+        raise HTTPException(status_code=503, detail=detector.last_error)
+
+    if not result.ok:
+        detector.last_error = result.error
+        raise HTTPException(status_code=503, detail=result.error or "Arduino firmware flash failed")
+
+    return HardwareStatus(
+        selected_device=settings.hardware_serial_device,
+        available=True,
+        connected=True,
+        last_response=result.response,
+    )
 
 
 @app.post("/api/audio/test-beep")

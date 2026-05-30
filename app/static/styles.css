@@ -295,6 +295,16 @@ dd {
   min-width: 0;
 }
 
+.hardware-test {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.hardware-actions {
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
 .audio-diagnostics {
   grid-column: 2;
   min-width: 0;
@@ -346,6 +356,10 @@ input[type="checkbox"] {
   }
 
   .audio-test {
+    grid-column: auto;
+  }
+
+  .hardware-test {
     grid-column: auto;
   }
 

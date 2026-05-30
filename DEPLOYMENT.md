@@ -27,6 +27,7 @@ sudo apt-get install -y docker.io docker-compose-plugin git v4l-utils alsa-utils
 sudo usermod -aG docker "$USER"
 v4l2-ctl --list-devices
 aplay -l
+ls -l /dev/serial/by-id
 ```
 
 Log out and back in after adding your user to the Docker group.
@@ -100,6 +101,14 @@ For audio, leave the output on `Automatic` unless you need to pin a specific dev
 
 Use the Audio diagnostics panel in Settings to confirm that `/dev/snd` is visible and `aplay -l` shows at least one playback device.
 
+For optional Arduino relay/servo hardware, flash `firmware/pigeonater_arduino/pigeonater_arduino.ino` to the Arduino, plug it into the NUC, and confirm the stable serial path:
+
+```bash
+ls -l /dev/serial/by-id
+```
+
+Select that `/dev/serial/by-id/...` path in Settings. Use `Flash firmware` after deploying a new app version when the Arduino sketch changes, then use the manual LED blink test first to confirm serial communication. Use the relay and servo test buttons before connecting any real deterrent hardware. Detection does not activate Arduino hardware in this version.
+
 If the host itself can play sound in Firefox or YouTube but the app still finds no outputs, the desktop is probably using PulseAudio or PipeWire session audio. In that case, mount the session socket too:
 
 ```bash
@@ -128,6 +137,9 @@ If the host sees the speaker but the container does not, restart the service aft
 ```yaml
 devices:
   - /dev/snd:/dev/snd
+device_cgroup_rules:
+  - "c 166:* rmw"
+  - "c 188:* rmw"
 ```
 
 And if the host sees Pulse or PipeWire sinks but the container does not, confirm you are using:

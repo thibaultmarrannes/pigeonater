@@ -14,6 +14,8 @@ services:
     device_cgroup_rules:
       - "c 81:* rmw"
       - "c 116:* rmw"
+      - "c 166:* rmw"
+      - "c 188:* rmw"
     environment:
       DATA_DIR: "/data"
       SNAPSHOT_DIR: "/data/snapshots"

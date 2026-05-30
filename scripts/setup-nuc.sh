@@ -170,6 +170,12 @@ main() {
   echo "Repository: $root"
   echo "Mode: $mode"
   echo "Detected audio mode: $audio_mode"
+  if [[ -d /dev/serial/by-id ]]; then
+    echo "Detected serial devices:"
+    ls -1 /dev/serial/by-id | sed 's/^/  /'
+  else
+    echo "Detected serial devices: none. Plug in the Arduino and check: ls -l /dev/serial/by-id"
+  fi
   if [[ "$audio_mode" == "pulse" ]]; then
     echo "Pulse socket: $pulse_socket"
   fi

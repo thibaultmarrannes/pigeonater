@@ -31,6 +31,15 @@ class DetectorSettings(BaseModel):
     camera_device: str = Field(default="/dev/video0", min_length=1, max_length=255)
     output_device: str = Field(default="auto", min_length=1, max_length=255)
     sound_on_detection: bool = False
+    hardware_serial_device: str = Field(
+        default="none",
+        pattern=r"^(none|/dev/(serial/by-id/[^/]+|ttyACM\d+|ttyUSB\d+))$",
+        max_length=255,
+    )
+    hardware_relay_pulse_ms: int = Field(default=500, ge=50, le=10000)
+    hardware_servo_from_angle: int = Field(default=30, ge=0, le=180)
+    hardware_servo_to_angle: int = Field(default=150, ge=0, le=180)
+    hardware_servo_step_delay_ms: int = Field(default=10, ge=1, le=1000)
     confidence_threshold: float = Field(default=0.35, ge=0.05, le=0.95)
     cooldown_seconds: int = Field(default=60, ge=1, le=3600)
     retention_days: int = Field(default=7, ge=1, le=365)
@@ -65,6 +74,27 @@ class AudioDiagnostics(BaseModel):
     aplay_devices: list[str]
     errors: list[str]
     recommended_fix: str | None
+
+
+class HardwareDevice(BaseModel):
+    path: str
+    name: str
+    selected: bool
+    available: bool
+
+
+class HardwareStatus(BaseModel):
+    selected_device: str
+    available: bool
+    connected: bool
+    last_response: str | None = None
+    last_error: str | None = None
+
+
+class HardwareCommandResult(BaseModel):
+    ok: bool
+    response: str | None = None
+    error: str | None = None
 
 
 class StatusResponse(BaseModel):
