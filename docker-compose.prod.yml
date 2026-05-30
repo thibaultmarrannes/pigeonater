@@ -5,6 +5,8 @@ services:
     image: "${PIGEONATER_IMAGE:-ghcr.io/thibaultmarrannes/pigeonater:latest}"
     container_name: pigeonater
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     devices:
       - /dev/snd:/dev/snd
     ports:

@@ -5,6 +5,8 @@ services:
     build: .
     container_name: pigeonater
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     devices:
       - /dev/snd:/dev/snd
     ports:
