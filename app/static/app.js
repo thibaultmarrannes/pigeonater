@@ -24,6 +24,12 @@ function snapshotSrc(event) {
   return `${event.snapshot_url}?v=${version}`;
 }
 
+function videoSrc(event) {
+  if (!event.video_url) return "";
+  const version = encodeURIComponent(`${event.id}-${event.created_at}`);
+  return `${event.video_url}?v=${version}`;
+}
+
 function requireVue() {
   if (!window.Vue) {
     throw new Error("Vue failed to load");
@@ -70,6 +76,7 @@ function dashboard() {
       formatDate,
       boxLabel,
       snapshotSrc,
+      videoSrc,
       async refresh() {
         try {
           const [status, events] = await Promise.all([
@@ -140,6 +147,7 @@ function eventsPage() {
       formatDate,
       boxLabel,
       snapshotSrc,
+      videoSrc,
       async refresh() {
         try {
           this.events = await requestJson("/api/events?limit=100");

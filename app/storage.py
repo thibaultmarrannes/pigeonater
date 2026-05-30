@@ -37,11 +37,13 @@ class Storage:
                     confidence REAL NOT NULL,
                     box_json TEXT NOT NULL,
                     snapshot_path TEXT NOT NULL,
+                    video_path TEXT,
                     webhook_sent INTEGER NOT NULL DEFAULT 0,
                     webhook_error TEXT
                 )
                 """
             )
+            self._ensure_column(conn, "events", "video_path", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS settings (
@@ -56,6 +58,11 @@ class Storage:
     def _settings_exist(self, conn: sqlite3.Connection) -> bool:
         row = conn.execute("SELECT 1 FROM settings WHERE key = 'detector'").fetchone()
         return row is not None
+
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, column_type: str) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
     def _write_settings(self, conn: sqlite3.Connection, settings: DetectorSettings) -> None:
         conn.execute(
@@ -88,6 +95,7 @@ class Storage:
         confidence: float,
         box: DetectionBox,
         snapshot_path: Path,
+        video_path: Path | None = None,
         created_at: datetime | None = None,
         webhook_sent: bool = False,
         webhook_error: str | None = None,
@@ -98,9 +106,9 @@ class Storage:
                 """
                 INSERT INTO events (
                     created_at, label, confidence, box_json, snapshot_path,
-                    webhook_sent, webhook_error
+                    video_path, webhook_sent, webhook_error
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     created_at.isoformat(),
@@ -108,6 +116,7 @@ class Storage:
                     confidence,
                     box.model_dump_json(),
                     str(snapshot_path),
+                    None if video_path is None else str(video_path),
                     int(webhook_sent),
                     webhook_error,
                 ),
@@ -117,6 +126,10 @@ class Storage:
         if event is None:
             raise RuntimeError("Created event could not be read back")
         return event
+
+    def update_event_video_path(self, event_id: int, video_path: Path) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE events SET video_path = ? WHERE id = ?", (str(video_path), event_id))
 
     def get_event(self, event_id: int) -> DetectionEvent | None:
         with self.connect() as conn:
@@ -140,18 +153,24 @@ class Storage:
         cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT id, snapshot_path FROM events WHERE created_at < ?",
+                "SELECT id, snapshot_path, video_path FROM events WHERE created_at < ?",
                 (cutoff.isoformat(),),
             ).fetchall()
             for row in rows:
                 path = Path(row["snapshot_path"])
                 if path.exists():
                     path.unlink()
+                video_path = row["video_path"]
+                if video_path:
+                    path = Path(video_path)
+                    if path.exists():
+                        path.unlink()
             conn.executemany("DELETE FROM events WHERE id = ?", [(row["id"],) for row in rows])
         return len(rows)
 
     def _row_to_event(self, row: sqlite3.Row) -> DetectionEvent:
         snapshot_path = row["snapshot_path"]
+        video_path = row["video_path"]
         return DetectionEvent(
             id=row["id"],
             created_at=datetime.fromisoformat(row["created_at"]),
@@ -160,7 +179,8 @@ class Storage:
             box=DetectionBox.model_validate(json.loads(row["box_json"])),
             snapshot_path=snapshot_path,
             snapshot_url=f"/snapshots/{Path(snapshot_path).name}",
+            video_path=video_path,
+            video_url=None if video_path is None else f"/snapshots/{Path(video_path).name}",
             webhook_sent=bool(row["webhook_sent"]),
             webhook_error=row["webhook_error"],
         )
-

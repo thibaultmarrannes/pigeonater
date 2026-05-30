@@ -14,6 +14,7 @@ V1 intentionally treats pretrained `bird` detections as pigeon candidates. The s
 - Ultralytics YOLO pretrained detector
 - SQLite event/settings database
 - Snapshot evidence with bounding boxes
+- 10 second MP4 event clips after detection, recorded at a target 24 FPS
 - 7 day default evidence retention
 - Start/pause controls and detector settings from the UI
 - Optional future action hook through `ACTION_WEBHOOK_URL`

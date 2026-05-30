@@ -9,7 +9,10 @@
   </section>
   <div class="event-list wide">
     <article v-for="event in events" :key="event.id" class="event-item">
-      <a :href="event.snapshot_url" target="_blank" rel="noreferrer">
+      <video v-if="event.video_url" controls preload="metadata" :poster="snapshotSrc(event)">
+        <source :src="videoSrc(event)" type="video/mp4">
+      </video>
+      <a v-else :href="event.snapshot_url" target="_blank" rel="noreferrer">
         <img :src="snapshotSrc(event)" :alt="`Detection snapshot ${event.id}`">
       </a>
       <div>

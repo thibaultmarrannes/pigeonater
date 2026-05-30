@@ -69,6 +69,7 @@ class DetectorWorker:
         self.last_frame_at: datetime | None = None
         self.last_error: str | None = None
         self._latest_preview_jpeg: bytes | None = None
+        self._latest_frame: np.ndarray | None = None
         self._latest_preview_at: datetime | None = None
         self._preview_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
@@ -76,6 +77,7 @@ class DetectorWorker:
         self._stop_event = asyncio.Event()
         self._last_event_at: datetime | None = None
         self._sound_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=1)
+        self._video_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         settings = self.storage.get_settings()
@@ -107,6 +109,7 @@ class DetectorWorker:
                 self.last_error = "Detector did not stop before timeout"
                 self._task.cancel()
         await self._stop_sound_worker()
+        await self._stop_video_tasks()
 
     async def run(self) -> None:
         self.worker_running = True
@@ -161,11 +164,16 @@ class DetectorWorker:
         encoded = await asyncio.to_thread(self.encode_preview_frame, frame)
         async with self._preview_lock:
             self._latest_preview_jpeg = encoded
+            self._latest_frame = frame.copy()
             self._latest_preview_at = datetime.now(UTC)
 
     async def latest_preview_jpeg(self) -> bytes | None:
         async with self._preview_lock:
             return self._latest_preview_jpeg
+
+    async def latest_frame_copy(self) -> np.ndarray | None:
+        async with self._preview_lock:
+            return None if self._latest_frame is None else self._latest_frame.copy()
 
     def encode_preview_frame(self, frame: np.ndarray) -> bytes:
         encoded, image = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -202,6 +210,7 @@ class DetectorWorker:
             created_at=now,
         )
         self._last_event_at = now
+        self.enqueue_event_video(event.id)
 
         settings = self.storage.get_settings()
         if settings.sound_on_detection:
@@ -215,6 +224,65 @@ class DetectorWorker:
                     (int(sent), error, event.id),
                 )
         return True
+
+    def enqueue_event_video(self, event_id: int) -> None:
+        task = asyncio.create_task(self.record_event_video(event_id))
+        self._video_tasks.add(task)
+        task.add_done_callback(self._video_tasks.discard)
+
+    async def record_event_video(self, event_id: int) -> None:
+        try:
+            video_path = await self._record_event_video(event_id)
+        except Exception as exc:
+            self.last_error = str(exc)
+            return
+        if video_path is not None:
+            self.storage.update_event_video_path(event_id, video_path)
+
+    async def _record_event_video(self, event_id: int) -> Path | None:
+        first_frame = await self.latest_frame_copy()
+        if first_frame is None:
+            return None
+
+        path = self.config.snapshot_dir / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{event_id}-{uuid4().hex}.mp4"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fps = max(float(self.config.event_video_fps), 1.0)
+        total_frames = max(int(float(self.config.event_video_seconds) * fps), 1)
+        height, width = first_frame.shape[:2]
+        writer = cv2.VideoWriter(
+            str(path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            (width, height),
+        )
+        if not writer.isOpened():
+            raise RuntimeError(f"Could not write event video to {path}")
+
+        try:
+            frame_interval = 1.0 / fps
+            next_frame_at = asyncio.get_running_loop().time()
+            last_frame = first_frame
+            for _ in range(total_frames):
+                frame = await self.latest_frame_copy()
+                if frame is not None:
+                    if frame.shape[:2] != (height, width):
+                        frame = cv2.resize(frame, (width, height))
+                    last_frame = frame
+                writer.write(last_frame)
+                next_frame_at += frame_interval
+                await asyncio.sleep(max(0.0, next_frame_at - asyncio.get_running_loop().time()))
+        finally:
+            writer.release()
+
+        return path
+
+    async def _stop_video_tasks(self) -> None:
+        if not self._video_tasks:
+            return
+        for task in list(self._video_tasks):
+            task.cancel()
+        await asyncio.gather(*self._video_tasks, return_exceptions=True)
+        self._video_tasks.clear()
 
     async def play_detection_sound(self, output_device: str) -> None:
         try:

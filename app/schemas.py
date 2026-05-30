@@ -20,6 +20,8 @@ class DetectionEvent(BaseModel):
     box: DetectionBox
     snapshot_path: str
     snapshot_url: str
+    video_path: str | None = None
+    video_url: str | None = None
     webhook_sent: bool = False
     webhook_error: str | None = None
 
