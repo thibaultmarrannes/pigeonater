@@ -35,7 +35,7 @@ On a development machine without `/dev/video0`, the dashboard will still load an
 ## Docker Compose
 
 ```bash
-cp .env.example .env
+scripts/setup-nuc.sh --mode dev
 docker compose up --build
 ```
 
@@ -54,7 +54,7 @@ volumes:
   - /dev:/dev
 ```
 
-On Ubuntu Desktop, if the OS itself can play sound but the container cannot see any outputs, start the app with the Pulse/PipeWire override:
+On Ubuntu Desktop, if the OS itself can play sound but the container cannot see any outputs, the setup script will detect the Pulse or PipeWire socket and tell you to include the Pulse override. The equivalent manual command is:
 
 ```bash
 export PULSE_SOCKET_PATH="${XDG_RUNTIME_DIR}/pulse/native"
@@ -85,7 +85,7 @@ The Settings page lists visible `/dev/video*` devices. Pick the camera there, th
 5. For production use, follow [DEPLOYMENT.md](DEPLOYMENT.md). For local source builds, start the app with:
 
 ```bash
-docker compose up -d --build
+scripts/setup-nuc.sh --mode dev --apply
 docker compose logs -f
 ```
 

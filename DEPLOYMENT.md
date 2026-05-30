@@ -48,6 +48,7 @@ mkdir -p ~/apps
 cd ~/apps
 git clone -b production https://github.com/thibaultmarrannes/pigeonater.git
 cd pigeonater
+scripts/setup-nuc.sh
 ```
 
 This gives the NUC the production Compose file, `.env.example`, and docs. The app itself still runs from the published GHCR image, not from a local build.
@@ -58,18 +59,35 @@ If you do not want a full clone, create a minimal deployment folder instead:
 mkdir -p ~/apps/pigeonater
 cd ~/apps/pigeonater
 curl -fsSLO https://raw.githubusercontent.com/thibaultmarrannes/pigeonater/production/docker-compose.prod.yml
+curl -fsSLO https://raw.githubusercontent.com/thibaultmarrannes/pigeonater/production/docker-compose.pulse.yml
 curl -fsSLO https://raw.githubusercontent.com/thibaultmarrannes/pigeonater/production/.env.example
+mkdir -p scripts
+curl -fsSLo scripts/setup-nuc.sh https://raw.githubusercontent.com/thibaultmarrannes/pigeonater/production/scripts/setup-nuc.sh
+chmod +x scripts/setup-nuc.sh
 ```
 
 ## Production Compose
 
-Create a `.env` file next to `docker-compose.prod.yml`:
+The preferred setup path is now the bootstrap script. It detects whether the host should use ALSA or Pulse or PipeWire audio, writes `.env`, and prints the exact Compose command it picked.
+
+```bash
+scripts/setup-nuc.sh
+```
+
+To deploy immediately:
+
+```bash
+scripts/setup-nuc.sh --apply
+docker compose -f docker-compose.prod.yml logs -f
+```
+
+If you want the old manual path, create a `.env` file next to `docker-compose.prod.yml`:
 
 ```bash
 cp .env.example .env
 ```
 
-Start the service:
+Then start the service:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
