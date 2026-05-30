@@ -40,6 +40,8 @@ class DetectorSettings(BaseModel):
     hardware_servo_from_angle: int = Field(default=30, ge=0, le=180)
     hardware_servo_to_angle: int = Field(default=150, ge=0, le=180)
     hardware_servo_step_delay_ms: int = Field(default=10, ge=1, le=1000)
+    detection_fps: float = Field(default=3.0, ge=0.5, le=10.0)
+    inference_max_width: int = Field(default=640, ge=320, le=1280)
     confidence_threshold: float = Field(default=0.35, ge=0.05, le=0.95)
     cooldown_seconds: int = Field(default=60, ge=1, le=3600)
     retention_days: int = Field(default=7, ge=1, le=365)
@@ -97,6 +99,13 @@ class HardwareCommandResult(BaseModel):
     error: str | None = None
 
 
+class DetectorPerformanceStats(BaseModel):
+    last_inference_duration_ms: float | None = None
+    effective_detection_fps: float | None = None
+    inference_size: str | None = None
+    detection_throttled: bool = False
+
+
 class StatusResponse(BaseModel):
     detector_enabled: bool
     worker_running: bool
@@ -111,3 +120,4 @@ class StatusResponse(BaseModel):
     last_event_at: datetime | None
     model_name: str
     settings: DetectorSettings
+    performance: DetectorPerformanceStats

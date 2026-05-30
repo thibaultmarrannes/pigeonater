@@ -62,6 +62,11 @@
         <dt>Camera</dt><dd v-text="status.camera_device"></dd>
         <dt>Audio</dt><dd v-text="status.audio_status"></dd>
         <dt>Model</dt><dd v-text="status.model_name"></dd>
+        <dt>Detection FPS</dt><dd v-text="status.settings.detection_fps"></dd>
+        <dt>Inference size</dt><dd v-text="status.performance.inference_size || `${status.settings.inference_max_width}px max`"></dd>
+        <dt>Last inference</dt><dd v-text="status.performance.last_inference_duration_ms === null ? 'Never' : `${Math.round(status.performance.last_inference_duration_ms)}ms`"></dd>
+        <dt>Effective FPS</dt><dd v-text="status.performance.effective_detection_fps === null ? 'Unknown' : status.performance.effective_detection_fps.toFixed(1)"></dd>
+        <dt>Throttled</dt><dd v-text="status.performance.detection_throttled ? 'Yes' : 'No'"></dd>
         <dt>Threshold</dt><dd v-text="status.settings.confidence_threshold"></dd>
         <dt>Cooldown</dt><dd v-text="`${status.settings.cooldown_seconds}s`"></dd>
         <dt>Retention</dt><dd v-text="`${status.settings.retention_days} days`"></dd>

@@ -18,6 +18,8 @@ def test_settings_round_trip(tmp_path):
             hardware_servo_from_angle=20,
             hardware_servo_to_angle=160,
             hardware_servo_step_delay_ms=5,
+            detection_fps=4.0,
+            inference_max_width=800,
             confidence_threshold=0.5,
             cooldown_seconds=12,
             retention_days=7,

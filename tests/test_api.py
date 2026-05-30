@@ -16,6 +16,8 @@ def test_status_endpoint_returns_settings():
     assert body["settings"]["retention_days"] == storage.get_settings().retention_days
     assert body["model_name"]
     assert "audio_ready" in body
+    assert body["performance"]["detection_throttled"] is False
+    assert "last_inference_duration_ms" in body["performance"]
 
 
 def test_version_endpoint_returns_version():
@@ -101,6 +103,32 @@ def test_settings_endpoint_validates_payload():
 
     assert response.status_code == 422
     assert detector.worker_running is False
+
+
+def test_settings_endpoint_validates_performance_payload():
+    storage.update_settings(DetectorSettings(enabled=False))
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/settings",
+            json={
+                "enabled": False,
+                "camera_device": "/dev/video0",
+                "output_device": "auto",
+                "sound_on_detection": False,
+                "hardware_serial_device": "none",
+                "hardware_relay_pulse_ms": 500,
+                "hardware_servo_from_angle": 30,
+                "hardware_servo_to_angle": 150,
+                "hardware_servo_step_delay_ms": 10,
+                "detection_fps": 20,
+                "inference_max_width": 200,
+                "confidence_threshold": 0.35,
+                "cooldown_seconds": 60,
+                "retention_days": 7,
+            },
+        )
+
+    assert response.status_code == 422
 
 
 def test_settings_endpoint_validates_hardware_payload():

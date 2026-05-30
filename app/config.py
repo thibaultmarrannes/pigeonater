@@ -48,6 +48,8 @@ def resolve_version(config: AppConfig) -> dict[str, str]:
         build_date = _git_output(["git", "show", "-s", "--format=%cs", "HEAD"]) or build_date
     if version == "dev" and commit != "unknown" and build_date != "unknown":
         version = f"{build_date}-{commit[:7]}"
+        if _git_is_dirty():
+            version = f"{version}-dirty"
 
     return {"version": version, "commit": commit, "build_date": build_date}
 
@@ -60,6 +62,19 @@ def _git_output(command: list[str]) -> str | None:
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def _git_is_dirty() -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--quiet"],
+            capture_output=True,
+            check=False,
+            timeout=1.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 1
 
 
 @lru_cache

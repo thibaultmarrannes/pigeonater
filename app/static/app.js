@@ -261,6 +261,7 @@ function settingsPage() {
         hardwareDevices: [],
         audioDiagnostics: null,
         hardwareStatus: null,
+        activeTab: "video",
         form: {
           enabled: false,
           camera_device: "/dev/video0",
@@ -271,6 +272,8 @@ function settingsPage() {
           hardware_servo_from_angle: 30,
           hardware_servo_to_angle: 150,
           hardware_servo_step_delay_ms: 10,
+          detection_fps: 3.0,
+          inference_max_width: 640,
           confidence_threshold: 0.35,
           cooldown_seconds: 60,
           retention_days: 7,

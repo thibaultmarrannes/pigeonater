@@ -10,7 +10,7 @@ import numpy as np
 
 from app.config import AppConfig
 from app.audio import get_audio_diagnostics, play_test_beep
-from app.schemas import DetectionBox
+from app.schemas import DetectionBox, DetectorPerformanceStats
 from app.storage import Storage
 from app.webhook import send_detection_webhook
 
@@ -77,6 +77,12 @@ class DetectorWorker:
         self._sound_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._last_event_at: datetime | None = None
+        self._last_detection_check_at: float | None = None
+        self._last_inference_started_at: float | None = None
+        self._last_inference_duration_ms: float | None = None
+        self._effective_detection_fps: float | None = None
+        self._inference_size: str | None = None
+        self._detection_throttled = False
         self._sound_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=1)
         self._video_tasks: set[asyncio.Task[None]] = set()
 
@@ -150,7 +156,14 @@ class DetectorWorker:
                 self.camera_connected = True
                 self.last_frame_at = datetime.now(UTC)
                 await self.update_preview_frame(frame)
-                await self.process_frame(frame, settings.confidence_threshold, settings.cooldown_seconds)
+                loop_time = asyncio.get_running_loop().time()
+                if self.should_run_detection(loop_time, settings.detection_fps, settings.cooldown_seconds):
+                    await self.process_frame(
+                        frame,
+                        settings.confidence_threshold,
+                        settings.cooldown_seconds,
+                        settings.inference_max_width,
+                    )
                 self.storage.cleanup_old_events(settings.retention_days)
                 await asyncio.sleep(self.config.detector_poll_seconds)
         except Exception as exc:
@@ -181,6 +194,14 @@ class DetectorWorker:
         async with self._preview_lock:
             return None if self._latest_frame is None else self._latest_frame.copy()
 
+    def performance_stats(self) -> DetectorPerformanceStats:
+        return DetectorPerformanceStats(
+            last_inference_duration_ms=self._last_inference_duration_ms,
+            effective_detection_fps=self._effective_detection_fps,
+            inference_size=self._inference_size,
+            detection_throttled=self._detection_throttled,
+        )
+
     def encode_preview_frame(self, frame: np.ndarray) -> bytes:
         preview = self._resize_preview_frame(frame)
         encoded, image = cv2.imencode(
@@ -205,20 +226,36 @@ class DetectorWorker:
         frame: np.ndarray,
         confidence_threshold: float,
         cooldown_seconds: int,
+        inference_max_width: int | None = None,
     ) -> bool:
+        if self.is_in_cooldown(cooldown_seconds):
+            self._detection_throttled = True
+            return False
+
         await self._ensure_model()
         assert self.model is not None
+        inference_frame, scale = self.prepare_inference_frame(frame, inference_max_width or frame.shape[1])
+        self._inference_size = f"{inference_frame.shape[1]}x{inference_frame.shape[0]}"
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        if self._last_inference_started_at is not None:
+            elapsed = started_at - self._last_inference_started_at
+            if elapsed > 0:
+                self._effective_detection_fps = 1.0 / elapsed
+        self._last_inference_started_at = started_at
         candidates = await self._call_blocking(
             "Run model detection",
-            lambda: self.model.detect(frame, confidence_threshold),
+            lambda: self.model.detect(inference_frame, confidence_threshold),
             self.config.model_detect_timeout_seconds,
         )
+        self._last_inference_duration_ms = (loop.time() - started_at) * 1000.0
+        self._detection_throttled = False
         if not candidates:
             return False
+        if scale != 1.0:
+            candidates = [self.scale_candidate_detection(candidate, scale) for candidate in candidates]
         best = max(candidates, key=lambda item: item.confidence)
         now = datetime.now(UTC)
-        if self._last_event_at and (now - self._last_event_at).total_seconds() < cooldown_seconds:
-            return False
 
         snapshot_path = await asyncio.to_thread(self.write_snapshot, frame, best.box)
         event = self.storage.create_event(
@@ -243,6 +280,53 @@ class DetectorWorker:
                     (int(sent), error, event.id),
                 )
         return True
+
+    def should_run_detection(self, now_monotonic: float, detection_fps: float, cooldown_seconds: int) -> bool:
+        min_interval = 1.0 / max(float(detection_fps), 0.1)
+        if self.is_in_cooldown(cooldown_seconds):
+            self._detection_throttled = True
+            return False
+        if self._last_detection_check_at is not None:
+            elapsed = now_monotonic - self._last_detection_check_at
+            if elapsed < min_interval:
+                self._detection_throttled = True
+                return False
+        self._last_detection_check_at = now_monotonic
+        self._detection_throttled = False
+        return True
+
+    def is_in_cooldown(self, cooldown_seconds: int) -> bool:
+        if self._last_event_at is None:
+            return False
+        return (datetime.now(UTC) - self._last_event_at).total_seconds() < cooldown_seconds
+
+    def prepare_inference_frame(self, frame: np.ndarray, max_width: int) -> tuple[np.ndarray, float]:
+        height, width = frame.shape[:2]
+        if width <= max_width:
+            return frame, 1.0
+        scale = max_width / float(width)
+        resized = cv2.resize(
+            frame,
+            (int(max_width), max(int(height * scale), 1)),
+            interpolation=cv2.INTER_AREA,
+        )
+        return resized, scale
+
+    def scale_candidate_detection(self, detection: CandidateDetection, scale: float) -> CandidateDetection:
+        if scale == 1.0:
+            return detection
+        factor = 1.0 / scale
+        box = detection.box
+        return CandidateDetection(
+            label=detection.label,
+            confidence=detection.confidence,
+            box=DetectionBox(
+                x1=box.x1 * factor,
+                y1=box.y1 * factor,
+                x2=box.x2 * factor,
+                y2=box.y2 * factor,
+            ),
+        )
 
     def enqueue_event_video(self, event_id: int) -> None:
         task = asyncio.create_task(self.record_event_video(event_id))

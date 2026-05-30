@@ -256,22 +256,83 @@ dd {
   color: var(--muted);
 }
 
+.settings-shell {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.settings-nav {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  position: sticky;
+  top: 76px;
+}
+
+.settings-nav button {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  justify-content: start;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.settings-nav button.active,
+.settings-nav button:hover {
+  background: #dfe6da;
+  color: var(--ink);
+}
+
 .settings-form {
   display: grid;
   gap: 18px;
-  max-width: 560px;
+  max-width: none;
 }
 
-.settings-layout {
+.settings-tab {
+  min-width: 0;
+}
+
+.settings-grid {
   align-items: start;
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(280px, 560px) minmax(280px, 1fr);
+  gap: 18px;
+  grid-template-columns: minmax(0, 680px);
 }
 
-.settings-form label {
+.settings-group {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-group label {
   display: grid;
   gap: 8px;
+}
+
+.settings-save {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.settings-save p {
+  margin: 0;
+}
+
+.panel-head h2 {
+  margin-bottom: 0;
+}
+
+.hardware-actions {
+  flex-wrap: wrap;
+  margin-top: 16px;
 }
 
 .panel-head {
@@ -282,31 +343,10 @@ dd {
   margin-bottom: 14px;
 }
 
-.panel-head h2 {
-  margin-bottom: 0;
-}
-
-.camera-preview {
-  min-width: 0;
-}
-
-.audio-test {
-  grid-column: 2;
-  min-width: 0;
-}
-
-.hardware-test {
-  grid-column: 2;
-  min-width: 0;
-}
-
-.hardware-actions {
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
-
+.camera-preview,
+.audio-test,
+.hardware-test,
 .audio-diagnostics {
-  grid-column: 2;
   min-width: 0;
 }
 
@@ -350,21 +390,15 @@ input[type="checkbox"] {
 
   .status-grid,
   .live-layout,
-  .settings-layout,
+  .settings-shell,
+  .settings-grid,
   .split {
     grid-template-columns: 1fr;
   }
 
-  .audio-test {
-    grid-column: auto;
-  }
-
-  .hardware-test {
-    grid-column: auto;
-  }
-
-  .audio-diagnostics {
-    grid-column: auto;
+  .settings-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    position: static;
   }
 
   .event-item {

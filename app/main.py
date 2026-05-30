@@ -95,6 +95,7 @@ def _build_status_response() -> StatusResponse:
         last_event_at=storage.latest_event_at(),
         model_name=config.model_name,
         settings=settings,
+        performance=detector.performance_stats(),
     )
 
 

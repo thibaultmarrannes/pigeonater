@@ -13,8 +13,10 @@ from app.storage import Storage
 class FakeModel:
     def __init__(self, detections):
         self.detections = detections
+        self.calls = []
 
     def detect(self, frame, confidence_threshold):
+        self.calls.append(frame)
         return [item for item in self.detections if item.confidence >= confidence_threshold]
 
 
@@ -226,10 +228,11 @@ async def test_process_frame_respects_cooldown(tmp_path, monkeypatch):
         snapshot_dir=tmp_path / "snapshots",
         database_path=tmp_path / "test.sqlite3",
     )
+    model = FakeModel([CandidateDetection("bird", 0.8, DetectionBox(x1=1, y1=1, x2=20, y2=20))])
     worker = DetectorWorker(
         config,
         storage,
-        model=FakeModel([CandidateDetection("bird", 0.8, DetectionBox(x1=1, y1=1, x2=20, y2=20))]),
+        model=model,
     )
     monkeypatch.setattr(worker, "enqueue_event_video", lambda event_id: None)
     frame = np.zeros((40, 40, 3), dtype=np.uint8)
@@ -240,6 +243,7 @@ async def test_process_frame_respects_cooldown(tmp_path, monkeypatch):
     assert first is True
     assert second is False
     assert len(storage.list_events()) == 1
+    assert len(model.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -261,3 +265,74 @@ async def test_process_frame_ignores_low_confidence(tmp_path, monkeypatch):
 
     assert created is False
     assert storage.list_events() == []
+
+
+def test_should_run_detection_respects_detection_fps(tmp_path):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+    )
+    worker = DetectorWorker(config, storage, model=FakeModel([]))
+
+    assert worker.should_run_detection(100.0, detection_fps=2.0, cooldown_seconds=60) is True
+    assert worker.should_run_detection(100.2, detection_fps=2.0, cooldown_seconds=60) is False
+    assert worker.performance_stats().detection_throttled is True
+    assert worker.should_run_detection(100.6, detection_fps=2.0, cooldown_seconds=60) is True
+
+
+def test_prepare_inference_frame_preserves_aspect_ratio(tmp_path):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+    )
+    worker = DetectorWorker(config, storage, model=FakeModel([]))
+
+    resized, scale = worker.prepare_inference_frame(np.zeros((480, 1280, 3), dtype=np.uint8), 640)
+
+    assert resized.shape[:2] == (240, 640)
+    assert scale == 0.5
+
+
+def test_scale_candidate_detection_to_original_frame(tmp_path):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+    )
+    worker = DetectorWorker(config, storage, model=FakeModel([]))
+    detection = CandidateDetection("bird", 0.7, DetectionBox(x1=10, y1=20, x2=30, y2=40))
+
+    scaled = worker.scale_candidate_detection(detection, 0.5)
+
+    assert scaled.box == DetectionBox(x1=20, y1=40, x2=60, y2=80)
+
+
+@pytest.mark.asyncio
+async def test_process_frame_resizes_inference_and_scales_event_box(tmp_path, monkeypatch):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    config = AppConfig(
+        data_dir=tmp_path,
+        snapshot_dir=tmp_path / "snapshots",
+        database_path=tmp_path / "test.sqlite3",
+    )
+    model = FakeModel([CandidateDetection("bird", 0.8, DetectionBox(x1=10, y1=20, x2=30, y2=40))])
+    worker = DetectorWorker(config, storage, model=model)
+    monkeypatch.setattr(worker, "enqueue_event_video", lambda event_id: None)
+
+    created = await worker.process_frame(
+        np.zeros((480, 1280, 3), dtype=np.uint8),
+        confidence_threshold=0.35,
+        cooldown_seconds=60,
+        inference_max_width=640,
+    )
+
+    event = storage.list_events()[0]
+    assert created is True
+    assert model.calls[0].shape[:2] == (240, 640)
+    assert event.box == DetectionBox(x1=20, y1=40, x2=60, y2=80)
+    assert worker.performance_stats().inference_size == "640x240"
