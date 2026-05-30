@@ -68,6 +68,9 @@ class DetectorWorker:
         self.audio_status = "Unknown"
         self.last_frame_at: datetime | None = None
         self.last_error: str | None = None
+        self._latest_preview_jpeg: bytes | None = None
+        self._latest_preview_at: datetime | None = None
+        self._preview_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
         self._sound_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -142,6 +145,7 @@ class DetectorWorker:
 
                 self.camera_connected = True
                 self.last_frame_at = datetime.now(UTC)
+                await self.update_preview_frame(frame)
                 await self.process_frame(frame, settings.confidence_threshold, settings.cooldown_seconds)
                 self.storage.cleanup_old_events(settings.retention_days)
                 await asyncio.sleep(self.config.detector_poll_seconds)
@@ -152,6 +156,22 @@ class DetectorWorker:
             self.camera_connected = False
             if capture is not None:
                 await asyncio.to_thread(capture.release)
+
+    async def update_preview_frame(self, frame: np.ndarray) -> None:
+        encoded = await asyncio.to_thread(self.encode_preview_frame, frame)
+        async with self._preview_lock:
+            self._latest_preview_jpeg = encoded
+            self._latest_preview_at = datetime.now(UTC)
+
+    async def latest_preview_jpeg(self) -> bytes | None:
+        async with self._preview_lock:
+            return self._latest_preview_jpeg
+
+    def encode_preview_frame(self, frame: np.ndarray) -> bytes:
+        encoded, image = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if not encoded:
+            raise RuntimeError("Camera preview JPEG encode failed")
+        return image.tobytes()
 
     async def process_frame(
         self,

@@ -190,6 +190,14 @@ async def api_audio_test_beep():
 @app.get("/api/camera/preview")
 async def api_camera_preview():
     settings = storage.get_settings()
+    cached_image = await detector.latest_preview_jpeg()
+    if cached_image is not None:
+        return Response(
+            content=cached_image,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
+
     result = await capture_preview_frame(settings.camera_device, config.camera_read_timeout_seconds)
     if not result.ok or result.image is None:
         detector.last_error = result.error

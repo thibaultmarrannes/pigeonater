@@ -199,6 +199,26 @@ def test_camera_preview_endpoint_returns_jpeg(monkeypatch):
     assert response.content == b"\xff\xd8jpeg"
 
 
+def test_camera_preview_endpoint_uses_cached_detector_frame(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=True, camera_device="/dev/video0"))
+
+    async def fake_cached_preview():
+        return b"\xff\xd8cached"
+
+    async def fail_preview(camera_device, timeout_seconds):
+        raise AssertionError("direct camera preview should not be opened")
+
+    monkeypatch.setattr(detector, "latest_preview_jpeg", fake_cached_preview)
+    monkeypatch.setattr("app.main.capture_preview_frame", fail_preview)
+
+    with TestClient(app) as client:
+        response = client.get("/api/camera/preview")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == b"\xff\xd8cached"
+
+
 def test_camera_preview_endpoint_reports_failure(monkeypatch):
     storage.update_settings(DetectorSettings(enabled=False, camera_device="/dev/video0"))
 
