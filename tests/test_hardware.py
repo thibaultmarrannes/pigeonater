@@ -127,6 +127,10 @@ def test_flash_firmware_runs_compile_and_upload(tmp_path):
     )
 
     assert result.ok is True
+    assert result.log is not None
+    assert "[compile] exit code 0" in result.log
+    assert "[upload] exit code 0" in result.log
+    assert "arduino-cli upload" in result.log
     assert calls == [
         ["arduino-cli", "compile", "--fqbn", "arduino:avr:uno", str(firmware)],
         ["arduino-cli", "upload", "-p", str(device), "--fqbn", "arduino:avr:uno", str(firmware)],
@@ -154,6 +158,10 @@ def test_flash_firmware_reports_failed_upload(tmp_path):
 
     assert result.ok is False
     assert result.error == "upload failed"
+    assert result.log is not None
+    assert "[compile] exit code 0" in result.log
+    assert "[upload] exit code 1" in result.log
+    assert "upload failed" in result.log
 
 
 def test_serial_error_returns_command_failure():

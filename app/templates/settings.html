@@ -171,6 +171,12 @@
             <p class="empty">Detection does not trigger Arduino hardware in this version.</p>
             <p v-text="hardwareMessage"></p>
             <p class="error" v-text="hardwareError"></p>
+            <div v-if="hardwareFlashLog" class="log-panel">
+              <div class="panel-head compact-head">
+                <h2>Firmware flash log</h2>
+              </div>
+              <pre v-text="hardwareFlashLog"></pre>
+            </div>
           </aside>
         </div>
       </div>

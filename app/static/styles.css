@@ -330,6 +330,30 @@ dd {
   margin-bottom: 0;
 }
 
+.compact-head {
+  margin-bottom: 8px;
+}
+
+.compact-head h2 {
+  font-size: 16px;
+}
+
+.log-panel {
+  margin-top: 16px;
+}
+
+.log-panel pre {
+  background: #101510;
+  border-radius: 8px;
+  color: #eef1eb;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
 .hardware-actions {
   flex-wrap: wrap;
   margin-top: 16px;

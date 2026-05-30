@@ -340,13 +340,20 @@ async def api_hardware_flash():
 
     if not result.ok:
         detector.last_error = result.error
-        raise HTTPException(status_code=503, detail=result.error or "Arduino firmware flash failed")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": result.error or "Arduino firmware flash failed",
+                "log": result.log,
+            },
+        )
 
     return HardwareStatus(
         selected_device=settings.hardware_serial_device,
         available=True,
         connected=True,
         last_response=result.response,
+        last_log=result.log,
     )
 
 

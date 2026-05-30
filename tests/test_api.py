@@ -307,7 +307,7 @@ def test_hardware_flash_endpoint(monkeypatch):
         assert device == "/dev/ttyACM0"
         assert str(firmware_path).endswith("firmware/pigeonater_arduino")
         assert fqbn == "arduino:avr:uno"
-        return HardwareCommandResult(ok=True, response="OK FIRMWARE_FLASHED")
+        return HardwareCommandResult(ok=True, response="OK FIRMWARE_FLASHED", log="compile ok\nupload ok")
 
     monkeypatch.setattr("app.main.flash_arduino_firmware", fake_flash)
 
@@ -317,6 +317,24 @@ def test_hardware_flash_endpoint(monkeypatch):
     assert response.status_code == 200
     assert response.json()["connected"] is True
     assert response.json()["last_response"] == "OK FIRMWARE_FLASHED"
+    assert response.json()["last_log"] == "compile ok\nupload ok"
+
+
+def test_hardware_flash_endpoint_reports_failure_log(monkeypatch):
+    storage.update_settings(DetectorSettings(enabled=False, hardware_serial_device="/dev/ttyACM0"))
+
+    def fake_flash(device, *, firmware_path, fqbn, timeout_seconds):
+        from app.schemas import HardwareCommandResult
+
+        return HardwareCommandResult(ok=False, error="upload failed", log="compile ok\nupload failed")
+
+    monkeypatch.setattr("app.main.flash_arduino_firmware", fake_flash)
+
+    with TestClient(app) as client:
+        response = client.post("/api/hardware/flash")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {"error": "upload failed", "log": "compile ok\nupload failed"}
 
 
 def test_audio_test_beep_endpoint(monkeypatch):

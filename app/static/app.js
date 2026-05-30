@@ -286,6 +286,7 @@ function settingsPage() {
         audioError: "",
         hardwareMessage: "",
         hardwareError: "",
+        hardwareFlashLog: "",
         diagnosticsError: "",
       };
     },
@@ -333,6 +334,7 @@ function settingsPage() {
           this.audioError = "";
           this.hardwareMessage = "";
           this.hardwareError = "";
+          this.hardwareFlashLog = "";
           await this.load();
           await this.refreshPreview();
         } catch (error) {
@@ -423,9 +425,22 @@ function settingsPage() {
       async flashArduino() {
         this.hardwareMessage = "Flashing Arduino firmware...";
         this.hardwareError = "";
+        this.hardwareFlashLog = "Starting firmware flash...";
         try {
-          this.hardwareStatus = await requestJson("/api/hardware/flash", { method: "POST" });
+          const response = await fetch("/api/hardware/flash", {
+            cache: "no-store",
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          });
+          const body = await response.json().catch(() => null);
+          if (!response.ok) {
+            const detail = body?.detail;
+            this.hardwareFlashLog = detail?.log || JSON.stringify(body, null, 2) || "";
+            throw new Error(detail?.error || detail || response.statusText);
+          }
+          this.hardwareStatus = body;
           this.hardwareMessage = "Arduino firmware flashed.";
+          this.hardwareFlashLog = body.last_log || body.last_response || "Firmware flashed.";
         } catch (error) {
           this.hardwareMessage = "";
           this.hardwareError = error.message;

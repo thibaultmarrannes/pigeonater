@@ -91,12 +91,14 @@ class HardwareStatus(BaseModel):
     connected: bool
     last_response: str | None = None
     last_error: str | None = None
+    last_log: str | None = None
 
 
 class HardwareCommandResult(BaseModel):
     ok: bool
     response: str | None = None
     error: str | None = None
+    log: str | None = None
 
 
 class DetectorPerformanceStats(BaseModel):

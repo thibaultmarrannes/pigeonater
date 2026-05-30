@@ -126,27 +126,32 @@ def flash_arduino_firmware(
     runner: Callable | None = None,
 ) -> HardwareCommandResult:
     if selected_device == DISABLED_DEVICE:
-        return HardwareCommandResult(ok=False, error="Arduino hardware is disabled")
+        return HardwareCommandResult(ok=False, error="Arduino hardware is disabled", log="Arduino hardware is disabled")
     if not Path(selected_device).exists():
-        return HardwareCommandResult(ok=False, error=f"Arduino serial device is not available: {selected_device}")
+        error = f"Arduino serial device is not available: {selected_device}"
+        return HardwareCommandResult(ok=False, error=error, log=error)
     if not firmware_path.exists():
-        return HardwareCommandResult(ok=False, error=f"Arduino firmware folder is missing: {firmware_path}")
+        error = f"Arduino firmware folder is missing: {firmware_path}"
+        return HardwareCommandResult(ok=False, error=error, log=error)
     if runner is None and shutil.which(cli_path) is None:
-        return HardwareCommandResult(ok=False, error="arduino-cli is not installed in the container")
+        error = "arduino-cli is not installed in the container"
+        return HardwareCommandResult(ok=False, error=error, log=error)
 
     runner = runner or subprocess.run
     compile_command = [cli_path, "compile", "--fqbn", fqbn, str(firmware_path)]
     upload_command = [cli_path, "upload", "-p", selected_device, "--fqbn", fqbn, str(firmware_path)]
 
-    compile_result = _run_firmware_command(runner, compile_command, timeout_seconds)
+    compile_result = _run_firmware_command(runner, "compile", compile_command, timeout_seconds)
     if not compile_result.ok:
         return compile_result
 
-    upload_result = _run_firmware_command(runner, upload_command, timeout_seconds)
+    upload_result = _run_firmware_command(runner, "upload", upload_command, timeout_seconds)
+    combined_log = "\n\n".join(part for part in [compile_result.log, upload_result.log] if part)
     if not upload_result.ok:
+        upload_result.log = combined_log or upload_result.log
         return upload_result
 
-    return HardwareCommandResult(ok=True, response="OK FIRMWARE_FLASHED")
+    return HardwareCommandResult(ok=True, response="OK FIRMWARE_FLASHED", log=combined_log or "OK FIRMWARE_FLASHED")
 
 
 def send_hardware_command(
@@ -190,18 +195,34 @@ def send_hardware_command(
     return HardwareCommandResult(ok=True, response=response)
 
 
-def _run_firmware_command(runner: Callable, command: list[str], timeout_seconds: float) -> HardwareCommandResult:
+def _run_firmware_command(
+    runner: Callable,
+    label: str,
+    command: list[str],
+    timeout_seconds: float,
+) -> HardwareCommandResult:
+    command_text = " ".join(command)
     try:
         result = runner(command, capture_output=True, text=True, timeout=timeout_seconds, check=False)
     except Exception as exc:
-        return HardwareCommandResult(ok=False, error=str(exc))
+        error = str(exc)
+        return HardwareCommandResult(ok=False, error=error, log=f"$ {command_text}\n{error}")
 
     stdout = (result.stdout or "").strip()
     stderr = (result.stderr or "").strip()
     output = "\n".join(part for part in [stdout, stderr] if part)
+    log = f"$ {command_text}"
+    if output:
+        log = f"{log}\n{output}"
+    log = f"[{label}] exit code {result.returncode}\n{log}"
     if result.returncode != 0:
-        return HardwareCommandResult(ok=False, response=output or None, error=output or f"Command failed: {command[0]}")
-    return HardwareCommandResult(ok=True, response=output or "OK")
+        return HardwareCommandResult(
+            ok=False,
+            response=output or None,
+            error=output or f"Command failed: {command[0]}",
+            log=log,
+        )
+    return HardwareCommandResult(ok=True, response=output or "OK", log=log)
 
 
 def _discover_serial_paths(by_id_dir: Path) -> list[str]:
