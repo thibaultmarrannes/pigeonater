@@ -130,6 +130,7 @@ function eventsPage() {
       return {
         events: [],
         error: "",
+        deletingVideos: {},
         timer: null,
         stream: null,
       };
@@ -148,6 +149,9 @@ function eventsPage() {
       boxLabel,
       snapshotSrc,
       videoSrc,
+      isDeletingVideo(event) {
+        return Boolean(this.deletingVideos[event.id]);
+      },
       async refresh() {
         try {
           this.events = await requestJson("/api/events?limit=100");
@@ -167,6 +171,22 @@ function eventsPage() {
         this.stream.onerror = () => {
           this.error = this.error || "Live updates interrupted. Falling back to polling.";
         };
+      },
+      async deleteEventVideo(event) {
+        if (!event.video_url || this.isDeletingVideo(event)) return;
+
+        this.deletingVideos = { ...this.deletingVideos, [event.id]: true };
+        try {
+          const updated = await requestJson(`/api/events/${event.id}/video`, { method: "DELETE" });
+          this.events = this.events.map((item) => (item.id === updated.id ? updated : item));
+          this.error = "";
+        } catch (error) {
+          this.error = error.message;
+        } finally {
+          const next = { ...this.deletingVideos };
+          delete next[event.id];
+          this.deletingVideos = next;
+        }
       },
     },
   }).mount("#events-app");

@@ -131,6 +131,25 @@ class Storage:
         with self.connect() as conn:
             conn.execute("UPDATE events SET video_path = ? WHERE id = ?", (str(video_path), event_id))
 
+    def delete_event_video(self, event_id: int) -> DetectionEvent | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT video_path FROM events WHERE id = ?", (event_id,)).fetchone()
+            if row is None:
+                return None
+
+            video_path = row["video_path"]
+            if video_path:
+                path = Path(video_path)
+                try:
+                    if path.is_file():
+                        path.unlink()
+                except FileNotFoundError:
+                    pass
+
+            conn.execute("UPDATE events SET video_path = NULL WHERE id = ?", (event_id,))
+
+        return self.get_event(event_id)
+
     def get_event(self, event_id: int) -> DetectionEvent | None:
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()

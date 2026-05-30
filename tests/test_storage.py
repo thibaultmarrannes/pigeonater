@@ -46,6 +46,32 @@ def test_event_video_path_round_trip(tmp_path):
     assert updated.video_url == "/snapshots/event.mp4"
 
 
+def test_delete_event_video_removes_file_and_keeps_event_snapshot(tmp_path):
+    storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
+    snapshot = tmp_path / "snapshots" / "event.jpg"
+    video = tmp_path / "snapshots" / "event.mp4"
+    snapshot.write_bytes(b"snapshot")
+    video.write_bytes(b"video")
+
+    event = storage.create_event(
+        label="bird",
+        confidence=0.9,
+        box=DetectionBox(x1=1, y1=2, x2=3, y2=4),
+        snapshot_path=snapshot,
+        video_path=video,
+    )
+
+    updated = storage.delete_event_video(event.id)
+
+    assert updated is not None
+    assert updated.id == event.id
+    assert updated.video_path is None
+    assert updated.video_url is None
+    assert not video.exists()
+    assert snapshot.exists()
+    assert storage.get_event(event.id) is not None
+
+
 def test_cleanup_old_events_removes_records_and_snapshots(tmp_path):
     storage = Storage(tmp_path / "test.sqlite3", tmp_path / "snapshots")
     old_snapshot = tmp_path / "snapshots" / "old.jpg"

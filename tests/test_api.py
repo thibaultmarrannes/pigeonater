@@ -3,7 +3,7 @@ import time
 from fastapi.testclient import TestClient
 
 from app.main import app, config, detector, storage
-from app.schemas import DetectorSettings
+from app.schemas import DetectionBox, DetectorSettings
 
 
 def test_status_endpoint_returns_settings():
@@ -38,6 +38,43 @@ def test_stream_endpoint_returns_event_stream():
     assert "event: update" in response.text
     assert '"status"' in response.text
     assert '"events"' in response.text
+
+
+def test_delete_event_video_endpoint_removes_video_but_keeps_event_and_snapshot():
+    config.snapshot_dir.mkdir(parents=True, exist_ok=True)
+    snapshot = config.snapshot_dir / "api-delete-video.jpg"
+    video = config.snapshot_dir / "api-delete-video.mp4"
+    snapshot.write_bytes(b"snapshot")
+    video.write_bytes(b"video")
+    event = storage.create_event(
+        label="bird",
+        confidence=0.9,
+        box=DetectionBox(x1=1, y1=2, x2=3, y2=4),
+        snapshot_path=snapshot,
+        video_path=video,
+    )
+
+    with TestClient(app) as client:
+        response = client.delete(f"/api/events/{event.id}/video")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == event.id
+    assert body["video_path"] is None
+    assert body["video_url"] is None
+    assert not video.exists()
+    assert snapshot.exists()
+    assert storage.get_event(event.id) is not None
+
+    snapshot.unlink(missing_ok=True)
+
+
+def test_delete_event_video_endpoint_reports_missing_event():
+    with TestClient(app) as client:
+        response = client.delete("/api/events/999999999/video")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Event not found"
 
 
 def test_page_routes_render():

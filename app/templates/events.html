@@ -15,11 +15,19 @@
       <a v-else :href="event.snapshot_url" target="_blank" rel="noreferrer">
         <img :src="snapshotSrc(event)" :alt="`Detection snapshot ${event.id}`">
       </a>
-      <div>
+      <div class="event-details">
         <strong v-text="`${event.label} candidate`"></strong>
         <span v-text="formatDate(event.created_at)"></span>
         <span v-text="`${Math.round(event.confidence * 100)}% confidence`"></span>
         <small v-text="boxLabel(event)"></small>
+        <button
+          v-if="event.video_url"
+          class="danger compact"
+          type="button"
+          :disabled="isDeletingVideo(event)"
+          @click="deleteEventVideo(event)"
+          v-text="isDeletingVideo(event) ? 'Deleting video...' : 'Delete video'"
+        ></button>
       </div>
     </article>
     <p v-if="!events.length" class="empty">No detections recorded yet.</p>

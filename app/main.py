@@ -13,7 +13,7 @@ from app.config import get_config, resolve_version
 from app.detector import DetectorWorker
 from app.preview import capture_preview_frame
 from app.audio import get_audio_diagnostics, list_audio_output_devices, play_test_beep
-from app.schemas import AudioDiagnostics, AudioOutputDevice, CameraDevice, DetectorSettings, StatusResponse
+from app.schemas import AudioDiagnostics, AudioOutputDevice, CameraDevice, DetectionEvent, DetectorSettings, StatusResponse
 from app.storage import Storage
 
 config = get_config()
@@ -244,6 +244,14 @@ async def api_live_stream(request: Request, once: bool = False):
 @app.get("/api/events/{event_id}")
 async def api_event(event_id: int):
     event = storage.get_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event
+
+
+@app.delete("/api/events/{event_id}/video", response_model=DetectionEvent)
+async def api_delete_event_video(event_id: int) -> DetectionEvent:
+    event = storage.delete_event_video(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     return event

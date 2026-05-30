@@ -121,6 +121,21 @@ button.secondary {
   color: var(--ink);
 }
 
+button.danger {
+  background: var(--danger);
+}
+
+button.compact {
+  font-size: 14px;
+  margin-top: 10px;
+  padding: 7px 10px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .actions {
   display: flex;
   gap: 10px;
@@ -214,6 +229,10 @@ dt {
   display: block;
   object-fit: cover;
   width: 132px;
+}
+
+.event-details {
+  min-width: 0;
 }
 
 dl {
