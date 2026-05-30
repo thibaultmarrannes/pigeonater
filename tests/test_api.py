@@ -43,7 +43,7 @@ def test_stream_endpoint_returns_event_stream():
 def test_page_routes_render():
     storage.update_settings(DetectorSettings(enabled=False))
     with TestClient(app) as client:
-        for path in ["/", "/events", "/settings"]:
+        for path in ["/", "/events", "/live", "/settings"]:
             response = client.get(path)
             assert response.status_code == 200
             assert "Pigeonater" in response.text
@@ -217,6 +217,21 @@ def test_camera_preview_endpoint_uses_cached_detector_frame(monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
     assert response.content == b"\xff\xd8cached"
+
+
+def test_live_stream_endpoint_uses_cached_detector_frame(monkeypatch):
+    async def fake_cached_preview():
+        return b"\xff\xd8live"
+
+    monkeypatch.setattr(detector, "latest_preview_jpeg", fake_cached_preview)
+
+    with TestClient(app) as client:
+        response = client.get("/api/live.mjpg?once=true")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("multipart/x-mixed-replace")
+    assert b"Content-Type: image/jpeg" in response.content
+    assert b"\xff\xd8live" in response.content
 
 
 def test_camera_preview_endpoint_reports_failure(monkeypatch):

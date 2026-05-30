@@ -172,6 +172,65 @@ function eventsPage() {
   }).mount("#events-app");
 }
 
+function livePage() {
+  const { createApp } = requireVue();
+  createApp({
+    data() {
+      return {
+        status: null,
+        statusError: "",
+        timer: null,
+        streamUrl: `/api/live.mjpg?t=${Date.now()}`,
+      };
+    },
+    computed: {
+      runningLabel() {
+        if (!this.status) return "Loading";
+        return this.status.detector_enabled && this.status.worker_running ? "Running" : "Paused";
+      },
+      cameraLabel() {
+        if (!this.status) return "Loading";
+        return this.status.camera_connected ? "Connected" : "Disconnected";
+      },
+    },
+    async mounted() {
+      await this.refresh();
+      this.timer = setInterval(this.refresh, 2000);
+    },
+    unmounted() {
+      if (this.timer) clearInterval(this.timer);
+    },
+    methods: {
+      formatDate,
+      async refresh() {
+        try {
+          this.status = await requestJson("/api/status");
+          this.statusError = this.status.last_error || "";
+        } catch (error) {
+          this.statusError = error.message;
+        }
+      },
+      async startDetector() {
+        try {
+          this.status = await requestJson("/api/detector/start", { method: "POST" });
+          this.streamUrl = `/api/live.mjpg?t=${Date.now()}`;
+          await this.refresh();
+        } catch (error) {
+          this.statusError = error.message;
+        }
+      },
+      async stopDetector() {
+        try {
+          this.status = await requestJson("/api/detector/stop", { method: "POST" });
+          await this.refresh();
+        } catch (error) {
+          this.statusError = error.message;
+        }
+      },
+    },
+  }).mount("#live-app");
+}
+
 function settingsPage() {
   const { createApp } = requireVue();
   createApp({
@@ -294,4 +353,4 @@ function settingsPage() {
   }).mount("#settings-app");
 }
 
-window.Pigeonater = { dashboard, eventsPage, settingsPage };
+window.Pigeonater = { dashboard, eventsPage, livePage, settingsPage };

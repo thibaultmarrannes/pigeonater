@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="live-app" v-cloak>
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Camera</p>
+      <h1>Live view</h1>
+    </div>
+    <div class="actions">
+      <button type="button" @click="startDetector">Start</button>
+      <button type="button" class="secondary" @click="stopDetector">Pause</button>
+    </div>
+  </section>
+
+  <section class="live-layout">
+    <div class="live-frame">
+      <img :src="streamUrl" alt="Live camera stream">
+    </div>
+    <aside class="panel">
+      <h2>Status</h2>
+      <dl v-if="status">
+        <dt>Detector</dt><dd v-text="runningLabel"></dd>
+        <dt>Camera</dt><dd v-text="cameraLabel"></dd>
+        <dt>Device</dt><dd v-text="status.camera_device"></dd>
+        <dt>Last frame</dt><dd v-text="formatDate(status.last_frame_at)"></dd>
+        <dt>Stream target</dt><dd>{{ version_info.version }}</dd>
+      </dl>
+      <p class="error" v-text="statusError"></p>
+    </aside>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.Pigeonater.livePage();</script>
+{% endblock %}

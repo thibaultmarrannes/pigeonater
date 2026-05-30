@@ -22,6 +22,7 @@ class AppConfig(BaseSettings):
     detector_stop_timeout_seconds: float = 2.0
     event_video_seconds: float = 10.0
     event_video_fps: float = 24.0
+    live_stream_fps: float = 5.0
     audio_discovery_timeout_seconds: float = 1.0
     audio_playback_timeout_seconds: float = 3.0
     pigeonater_version: str = "dev"

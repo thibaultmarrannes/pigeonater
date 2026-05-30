@@ -162,6 +162,31 @@ dt {
   grid-template-columns: minmax(0, 1fr) 320px;
 }
 
+.live-layout {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.live-frame {
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: #101510;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.live-frame img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
 .event-list {
   display: grid;
   gap: 14px;
@@ -295,6 +320,7 @@ input[type="checkbox"] {
   }
 
   .status-grid,
+  .live-layout,
   .settings-layout,
   .split {
     grid-template-columns: 1fr;

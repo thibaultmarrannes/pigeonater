@@ -47,6 +47,11 @@ async def events_page(request: Request):
     return templates.TemplateResponse(request, "events.html", {"version_info": version_info})
 
 
+@app.get("/live", response_class=HTMLResponse)
+async def live_page(request: Request):
+    return templates.TemplateResponse(request, "live.html", {"version_info": version_info})
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     return templates.TemplateResponse(request, "settings.html", {"version_info": version_info})
@@ -206,6 +211,33 @@ async def api_camera_preview():
         content=result.image,
         media_type="image/jpeg",
         headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@app.get("/api/live.mjpg")
+async def api_live_stream(request: Request, once: bool = False):
+    async def frame_stream():
+        interval = 1.0 / max(float(config.live_stream_fps), 1.0)
+        while True:
+            image = await detector.latest_preview_jpeg()
+            if image is not None:
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Cache-Control: no-store\r\n\r\n"
+                    + image
+                    + b"\r\n"
+                )
+                if once:
+                    break
+            if await request.is_disconnected():
+                break
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(
+        frame_stream(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "X-Accel-Buffering": "no"},
     )
 
 
